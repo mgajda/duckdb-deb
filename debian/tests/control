@@ -1,0 +1,35 @@
+# DEP-8 / autopkgtest control file.
+#
+# Tests run against the installed .deb files (not the source tree).
+# They exist to catch packaging defects that build-time CI cannot
+# see: missing Depends, missing files in the binary packages,
+# wrong rpath, ABI mismatches between libduckdb1 and the
+# headers shipped in libduckdb-dev.
+#
+# Each Tests: line maps to an executable script in this directory.
+# Per DEP-8 spec, tests are flat: no subdirectories.  Source
+# files for the C/C++ link tests (foo.c, foo.cpp) live alongside
+# the scripts and are compiled at test-run time, not at build
+# time — this is intentional, since the point of the test is to
+# verify that an end user could compile against the installed
+# headers and library.
+#
+# Test groupings reflect Depends, not failure ordering: every
+# test is run independently by autopkgtest and reports its own
+# pass/fail.  Within a single test script, sub-steps are
+# fail-fast (a failing compile makes a later link test
+# meaningless).
+
+# CLI-only smoke tests: exercise the duckdb shell against the
+# installed binary.  Depend on duckdb (the CLI package); no
+# headers needed.
+Tests: cli-smoke, csv, two-process-rw
+Depends: duckdb
+
+# Library link tests: build a tiny C or C++ program against the
+# installed headers and link against the installed shared
+# library.  Depend on libduckdb-dev (which pulls in libduckdb1
+# via versioned Depends).  build-essential is required to have
+# a compiler available at test time.
+Tests: c-link, cxx-link, arrow, multithread
+Depends: libduckdb-dev, build-essential

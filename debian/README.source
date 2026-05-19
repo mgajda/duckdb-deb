@@ -1,0 +1,140 @@
+duckdb for Debian / Ubuntu
+==========================
+
+This is a packaging fork of https://github.com/duckdb/duckdb that
+adds the debian/ directory needed to produce .deb files.  It is
+unofficial; the upstream DuckDB project does not currently ship
+Debian packages.
+
+  - End users wanting to install: see debian/README.distribution
+    (GitHub release downloads now, OBS apt repository planned).
+  - Maintainers publishing to OBS: see debian/README.OBS.
+
+The remainder of this file documents the source-package layout and
+the branch-rebase workflow.
+
+Branch layout (DEP-14)
+----------------------
+
+  upstream/latest   mirrors the upstream main branch verbatim, no
+                    Debian-specific files.
+  debian/latest     upstream/latest plus the debian/ directory in
+                    this tree.  This is the branch from which
+                    packages are built.
+
+To take new upstream commits:
+
+  git fetch upstream
+  git checkout upstream/latest
+  git merge --ff-only upstream/main
+  git checkout debian/latest
+  git rebase upstream/latest
+
+The packaging is almost entirely additive: it adds the debian/
+directory but does not modify upstream source files directly.  The
+single quilt patch in debian/patches/ is the sole exception, and it
+touches src/CMakeLists.txt only; merge conflicts on rebase are
+therefore rare and limited to that one file.
+
+Version numbering
+-----------------
+
+Package versions are of the form
+
+  <upstream-x.y.z>+git<YYYYMMDD>.<short-hash>-<debian-revision>
+
+for development snapshots, or
+
+  <upstream-x.y.z>-<debian-revision>
+
+for builds of a tagged upstream release.  The Debian revision is
+incremented for packaging-only changes between upstream syncs.
+
+Binary packages
+---------------
+
+  duckdb              command-line shell
+  libduckdb1          shared library (SONAME = MAJOR only, see
+                      debian/patches/soversion-major-only.patch)
+  libduckdb-dev       headers, .so symlink, CMake config, demo_capi
+                      example sources
+
+The upstream CMake also builds libduckdb_static.a.  We do not ship
+it.  Users who need a fully static DuckDB should use a musl-based
+distribution.  The archive is discarded in debian/rules.
+
+Compiler
+--------
+
+Build-Depends specifies g++ (>= 11), which is the gcc that ships in
+all currently-supported Debian and Ubuntu LTS targets (Debian
+trixie/sid, Ubuntu jammy/noble).  This is a packaging choice for
+predictable C++17 + hardening defaults — upstream's own minimum is
+just C++11.  To build with clang instead, set CC and CXX before
+dpkg-buildpackage:
+
+  CC=clang CXX=clang++ dpkg-buildpackage -us -uc -b
+
+No clang package is listed in Build-Depends so that the default OBS
+chroot stays minimal; users who need clang must arrange it
+themselves at build time.
+
+Quilt patches
+-------------
+
+  soversion-major-only.patch
+      Sets the SONAME to MAJOR only (libduckdb.so.1) instead of
+      MAJOR.MINOR.  Activated by passing -DSET_DUCKDB_LIBRARY_VERSION=ON
+      from debian/rules, since upstream's CMake leaves the version
+      block guarded by an OFF-by-default option.  See the patch
+      header for the rationale.
+
+Third-party licensing
+---------------------
+
+DuckDB vendors a number of upstream libraries under third_party/.
+debian/copyright delegates to the per-component LICENSE files
+inside third_party/<name>/LICENSE rather than reproducing them
+inline; libduckdb-dev additionally ships those LICENSE files under
+/usr/share/doc/libduckdb-dev/third_party-licenses/.  See the
+"Files: third_party/*" stanza in debian/copyright for the
+components that do not currently carry an in-tree LICENSE file
+(catch, imdb, thrift).
+
+Extensions
+----------
+
+The following in-tree extensions are statically linked into the
+shared library and the CLI; see debian/rules:
+
+  autocomplete       SQL tab-completion in the REPL
+  core_functions     standard built-in functions (string, math, date)
+  icu                Unicode collation + IANA timezones
+  json               read_json() and JSON manipulation
+  parquet            read_parquet() and Parquet writers
+
+Deliberately excluded:
+
+  delta              experimental, requires a Rust toolchain
+                     (delta-kernel-rs).  Re-enable by adding rustc
+                     and cargo to Build-Depends and "delta" to
+                     DUCKDB_EXTENSIONS in debian/rules.
+  jemalloc           statically vendors its own jemalloc, which
+                     conflicts with Debian's libjemalloc2 debug
+                     tooling and surprises operators expecting the
+                     system allocator.
+  tpcds, tpch        benchmark schema generators only.
+
+The demo_capi extension is not loaded but its sources are shipped
+as a worked C API example under
+/usr/share/doc/libduckdb-dev/examples/demo_capi/.
+
+Publishing
+----------
+
+CI (.github/workflows/debian-package.yml) verifies that the source
+package and the binaries build on Debian trixie, Debian sid, and
+the supported Ubuntu LTS targets on every push to debian/latest.
+Releases are published to OBS from the maintainer's laptop using
+debian/scripts/publish.sh; CI does not have OBS credentials.  See
+debian/README.OBS for one-time bootstrap and the publish loop.

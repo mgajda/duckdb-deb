@@ -1,0 +1,17 @@
+#!/bin/sh
+# DEP-8 test: multi-threaded inserts into a single in-memory
+# DuckDB database via the C API.  Verifies that the build's
+# threading is not single-threaded-by-accident (which would
+# silently serialise the threads and pass functionally, but the
+# row count check below would still fail loudly if a thread
+# never got a connection or its INSERT raced badly).
+
+set -eu
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+src_dir=$(dirname "$(readlink -f "$0")")
+
+echo "== compiling multithread.c =="
+cc -O2 -Wall -Wextra -pthread -o multithread "$src_dir/multithread.c" -lduckdb
+
+echo "== running =="
+./multithread

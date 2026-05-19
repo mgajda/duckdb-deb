@@ -1,0 +1,20 @@
+#!/bin/sh
+# DEP-8 test: exercise the Arrow C-API surface in libduckdb.
+# Verifies that duckdb_query_arrow, the schema/array fetch
+# entry points, and the matching destroy functions are all
+# present in the installed libduckdb1 and resolve at runtime.
+#
+# This test does NOT depend on libarrow on the host: DuckDB's
+# C API exposes Arrow data as opaque pointers conforming to
+# the Arrow C Data Interface; consuming them only requires
+# DuckDB itself.
+
+set -eu
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+src_dir=$(dirname "$(readlink -f "$0")")
+
+echo "== compiling arrow.c =="
+cc -O2 -Wall -Wextra -o arrow "$src_dir/arrow.c" -lduckdb
+
+echo "== running =="
+./arrow

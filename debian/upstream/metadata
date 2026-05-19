@@ -1,0 +1,9 @@
+---
+Bug-Database: https://github.com/duckdb/duckdb/issues
+Bug-Submit: https://github.com/duckdb/duckdb/issues/new
+Changelog: https://github.com/duckdb/duckdb/releases
+Documentation: https://duckdb.org/docs/
+FAQ: https://duckdb.org/faq
+Repository: https://github.com/duckdb/duckdb.git
+Repository-Browse: https://github.com/duckdb/duckdb
+Security-Contact: https://github.com/duckdb/duckdb/security/advisories/new

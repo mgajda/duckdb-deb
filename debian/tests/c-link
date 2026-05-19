@@ -1,0 +1,23 @@
+#!/bin/sh
+# DEP-8 test: compile a tiny C program against installed
+# libduckdb-dev headers, link against the installed libduckdb1,
+# and run it.  Verifies that an end user of the -dev package can
+# actually build software against DuckDB.
+
+set -eu
+
+# Per DEP-8 spec, AUTOPKGTEST_TMP is a writable scratch dir.
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+
+# The test program ships alongside this script in debian/tests/.
+# autopkgtest copies the debian/tests/ directory contents to a
+# read-only location and exports the path as AUTOPKGTEST_TESTBED;
+# but we don't need to write there — we just need to know where
+# to find c-link.c.  Use $0's directory.
+src_dir=$(dirname "$(readlink -f "$0")")
+
+echo "== compiling c-link.c =="
+cc -O2 -Wall -Wextra -o c-link "$src_dir/c-link.c" -lduckdb
+
+echo "== running =="
+./c-link

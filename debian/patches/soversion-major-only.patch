@@ -1,0 +1,33 @@
+Description: Use MAJOR-only SOVERSION for the shared library
+ The upstream CMake sets SOVERSION to "MAJOR.MINOR", which makes the
+ shared-library SONAME change on every minor release.  Under Debian's
+ binary-package naming convention (libfoo<SOVERSION>) that would force
+ the package to be renamed (libduckdb1.4 -> libduckdb1.5 -> ...) at
+ every upstream minor release, which is unhelpful for downstream users
+ tracking a PPA.
+ .
+ This patch reduces SOVERSION to MAJOR only.  Reverse dependencies
+ will still be pinned via dh_makeshlibs / dh_shlibdeps against the
+ real upstream version recorded in the SONAME, so cross-minor
+ incompatibility surfaces at install time even though the package
+ name does not change.
+ .
+ Independent reimplementation; not derived from any third-party
+ patch.  The rationale is the standard Debian library-packaging
+ convention documented in Debian Policy section 8 and the Debian
+ Library Packaging Guide.
+Author: Michal J. Gajda <mjgajda@gmail.com>
+Forwarded: not-needed
+Last-Update: 2026-05-17
+
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -107,7 +107,7 @@ link_threads(duckdb PUBLIC)
+ if(SET_DUCKDB_LIBRARY_VERSION)
+   set_target_properties(
+     duckdb PROPERTIES VERSION ${DUCKDB_VERSION_NUMBER}
+-                      SOVERSION ${DUCKDB_MAJOR_VERSION}.${DUCKDB_MINOR_VERSION})
++                      SOVERSION ${DUCKDB_MAJOR_VERSION})
+
+ endif()
+

@@ -1,0 +1,262 @@
+# Build the Debian/Ubuntu source and binary packages on every push
+# to debian/latest, every PR targeting it, and every v* tag.  This
+# does NOT publish to OBS — see debian/scripts/publish.sh and
+# debian/README.OBS.  Its job is to catch packaging regressions
+# before they reach the maintainer's laptop.
+#
+# Matrix is kept narrow on purpose: one container per target
+# distribution, amd64 only.  OBS rebuilds the same matrix
+# server-side (and adds arm64) once publish.sh runs; CI's value
+# is fast feedback on the source-package shape, not full multi-arch
+# coverage.
+
+name: debian-package
+
+on:
+  push:
+    branches: [debian/latest]
+    tags: ['v*']
+  pull_request:
+    branches: [debian/latest]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed for the tag-release job below; build jobs
+                    # don't read this scope.
+
+jobs:
+  build:
+    name: ${{ matrix.target.label }}
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.target.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { label: debian-trixie,   image: 'debian:trixie' }
+          - { label: debian-sid,      image: 'debian:sid' }
+          - { label: ubuntu-jammy,    image: 'ubuntu:22.04' }
+          - { label: ubuntu-noble,    image: 'ubuntu:24.04' }
+          # ubuntu-26.04: add once the container image is published
+          # on Docker Hub; not all LTS releases get a same-day image.
+
+    steps:
+      - name: Install build prerequisites
+        # apt-get is run before the checkout so `git` is available
+        # for actions/checkout and dpkg-parsechangelog inside debian/rules.
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+              build-essential ca-certificates devscripts \
+              dpkg-dev equivs fakeroot git lintian quilt
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # dpkg-parsechangelog and git rev-parse need history
+
+      - name: Mark workspace as a safe git directory
+        # actions/checkout's owner uid mismatch with the container's
+        # root user trips git's "dubious ownership" check.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install package Build-Depends
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          mk-build-deps --install --remove --tool='apt-get -y --no-install-recommends' debian/control
+
+      - name: Build source + binary packages
+        run: |
+          set -eu
+          # -us -uc: don't sign source or changes.  CI has no key by
+          # design; signing is part of publishing, not building.
+          # -b: binary-only on this leg; the source package is built
+          # in the dedicated job below for upload as a release asset.
+          dpkg-buildpackage -us -uc -b
+
+      - name: Stage build outputs into workspace
+        # dpkg-buildpackage writes .deb/.changes/.buildinfo to the
+        # parent of the source tree, which sits *outside* the
+        # GitHub workspace.  upload-artifact@v4 refuses paths
+        # outside the workspace, so move them in before upload.
+        run: |
+          set -eu
+          mkdir -p artefacts
+          mv ../*.deb ../*.changes ../*.buildinfo artefacts/
+
+      - name: Run lintian (strict)
+        # Uses debian/scripts/lintian-local.sh so the CI invocation
+        # is identical to what a maintainer runs locally.  The
+        # script gates on error+warning severity with a documented
+        # suppression list (see the script header for the
+        # justification for each suppressed tag).  Failing here
+        # means a real packaging issue, not noise.
+        run: debian/scripts/lintian-local.sh
+
+      - name: Upload built .deb files
+        uses: actions/upload-artifact@v4
+        with:
+          name: debs-${{ matrix.target.label }}
+          path: |
+            artefacts/*.deb
+            artefacts/*.changes
+            artefacts/*.buildinfo
+          # Default retention is 90 days; tagged builds are also
+          # promoted to a GH release below, which has no expiry.
+          retention-days: 30
+
+  source-package:
+    # Build the .dsc + orig tarball once, on the newest Debian, for
+    # release upload.  OBS re-derives these from git, so this job
+    # exists only to give humans a single download of "the source
+    # this tag corresponds to."
+    name: source-package
+    runs-on: ubuntu-latest
+    container:
+      image: 'debian:sid'
+    steps:
+      - name: Install prerequisites
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+              ca-certificates devscripts dpkg-dev fakeroot git
+
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install Build-Depends-Indep
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get install -y --no-install-recommends equivs
+          mk-build-deps --install --remove --tool='apt-get -y --no-install-recommends' debian/control
+
+      - name: Build source package
+        run: dpkg-buildpackage -us -uc -S -d
+
+      - name: Stage source package into workspace
+        run: |
+          set -eu
+          mkdir -p artefacts
+          mv ../*.dsc ../*.tar.* ../*_source.changes artefacts/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-package
+          path: |
+            artefacts/*.dsc
+            artefacts/*.tar.*
+            artefacts/*_source.changes
+          retention-days: 30
+
+  autopkgtest:
+    # Run debian/tests/ against the freshly built .deb files on a
+    # clean container of each target distribution.  This catches
+    # packaging defects that the build job cannot see: missing
+    # Depends, wrong shlibs, missing files in the binary packages,
+    # ABI breakage between libduckdb1 and libduckdb-dev's headers,
+    # rpath problems, etc.
+    #
+    # The same debian/tests/control + scripts are what a Debian
+    # mentors reviewer will run with `autopkgtest` on their own
+    # machine, so passing here is a real readiness signal.
+    name: autopkgtest-${{ matrix.target.label }}
+    runs-on: ubuntu-latest
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { label: debian-trixie, image: 'debian:trixie' }
+          - { label: debian-sid,    image: 'debian:sid' }
+          - { label: ubuntu-jammy,  image: 'ubuntu:22.04' }
+          - { label: ubuntu-noble,  image: 'ubuntu:24.04' }
+    container:
+      image: ${{ matrix.target.image }}
+    steps:
+      - name: Install autopkgtest + git
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+              autopkgtest ca-certificates git
+
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Download .deb artefacts for this distro
+        uses: actions/download-artifact@v4
+        with:
+          name: debs-${{ matrix.target.label }}
+          path: artefacts
+
+      - name: Run autopkgtest
+        # `--no-built-binaries` together with explicit .deb paths
+        # tells autopkgtest to install the packages we just built,
+        # not to rebuild from source.  `null` runner means
+        # "current container" — we're already inside the target
+        # distro's container, so no second-level isolation is
+        # needed (and would not work without privileged mode).
+        # `--shell-fail` opens a debug shell if running locally;
+        # in CI it has no effect because there is no terminal.
+        # Exit code 0 = all tests passed; 2 = some tests were
+        # skipped (skippable restriction); 4 = a real failure.
+        run: |
+          set -eu
+          autopkgtest \
+              artefacts/*.deb \
+              artefacts/*.changes \
+              --output-dir=autopkgtest-out \
+              -- null
+
+      - name: Upload autopkgtest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autopkgtest-logs-${{ matrix.target.label }}
+          path: autopkgtest-out
+          retention-days: 14
+
+  release:
+    # On v* tags only: gather all matrix artefacts and attach them
+    # to a GitHub Release so they outlive the 30-day artifact
+    # retention window.  Releases are kept indefinitely.
+    name: promote-to-github-release
+    needs: [build, source-package, autopkgtest]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          tag=${GITHUB_REF#refs/tags/}
+          # Idempotent: create the release if missing, otherwise
+          # just upload the new assets to the existing one.
+          # `--clobber` overwrites assets with the same filename,
+          # so re-runs of the workflow on the same tag succeed.
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+              gh release upload "$tag" release-assets/* \
+                  --repo "$REPO" --clobber
+          else
+              gh release create "$tag" release-assets/* \
+                  --repo "$REPO" \
+                  --title "$tag" \
+                  --notes "Automated build artefacts for $tag.  See debian/README.distribution for installation instructions."
+          fi

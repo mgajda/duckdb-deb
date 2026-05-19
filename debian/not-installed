@@ -1,0 +1,54 @@
+# Files produced by the upstream build that we intentionally do not ship.
+#
+# debhelper (compat 13) defaults dh_missing to --fail-missing, so any
+# file in debian/tmp that no *.install glob claims must either be
+# installed somewhere, deleted in debian/rules, or listed here.
+#
+# Everything below is a *build-time* artefact: static archives that
+# are linked into the public libduckdb.so we DO ship.  Shipping them
+# again as standalone .a files would (a) bloat libduckdb-dev with
+# duplicates of code already in the shared library, (b) lock the
+# packaging into upstream's internal target names, which change
+# between releases, and (c) invite users to statically link parts
+# of DuckDB they should be loading dynamically.
+#
+# Paths use the literal triplet directory rather than ${DEB_HOST_MULTIARCH}
+# because debian/not-installed does not expand substitutions; the
+# wildcard form works across architectures.  See dh_missing(1) and
+# https://wiki.debian.org/Multiarch/Implementation .
+
+# Vendored third-party libraries, already linked into libduckdb.so.
+usr/lib/*/libduckdb_fastpforlib.a
+usr/lib/*/libduckdb_fmt.a
+usr/lib/*/libduckdb_fsst.a
+usr/lib/*/libduckdb_hyperloglog.a
+usr/lib/*/libduckdb_mbedtls.a
+usr/lib/*/libduckdb_miniz.a
+usr/lib/*/libduckdb_re2.a
+usr/lib/*/libduckdb_skiplistlib.a
+usr/lib/*/libduckdb_utf8proc.a
+usr/lib/*/libduckdb_yyjson.a
+usr/lib/*/libduckdb_zstd.a
+
+# In-tree extensions baked into libduckdb.so (DUCKDB_EXTENSIONS in
+# debian/rules).  The .a is upstream's internal build target; the
+# extension is reachable at runtime via the shared library.
+usr/lib/*/libautocomplete_extension.a
+usr/lib/*/libcore_functions_extension.a
+usr/lib/*/libicu_extension.a
+usr/lib/*/libjson_extension.a
+usr/lib/*/libparquet_extension.a
+
+# jemalloc_extension's static archive is built by upstream CMake
+# even when the extension is not enabled in DUCKDB_EXTENSIONS (the
+# build target is unconditional; only the runtime registration is
+# gated).  We do not link jemalloc into the shared library -- see
+# debian/rules' DUCKDB_EXTENSIONS comment -- so this archive must
+# not be shipped.
+usr/lib/*/libjemalloc_extension.a
+
+# Build-time glue: the loader and a dummy stub used to satisfy
+# extension registration symbols when extensions are linked in
+# statically.  No runtime use.
+usr/lib/*/libduckdb_generated_extension_loader.a
+usr/lib/*/libdummy_static_extension_loader.a

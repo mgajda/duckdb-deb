@@ -1,0 +1,14 @@
+#!/bin/sh
+# DEP-8 test: compile a C++ program against duckdb.hpp and link
+# against libduckdb1.  Same shape as c-link, but exercises the
+# C++ amalgamation header.
+
+set -eu
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+src_dir=$(dirname "$(readlink -f "$0")")
+
+echo "== compiling cxx-link.cpp =="
+c++ -std=c++17 -O2 -Wall -Wextra -o cxx-link "$src_dir/cxx-link.cpp" -lduckdb
+
+echo "== running =="
+./cxx-link

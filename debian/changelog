@@ -1,0 +1,8 @@
+duckdb (1.5.2+git20260517.c4e422bbe4-1) UNRELEASED; urgency=medium
+
+  * Debian packaging for a development snapshot of DuckDB taken from
+    the upstream main branch at commit c4e422bbe4 (2026-05-17),
+    which is based on upstream tag v1.5.2.
+  * Initial libduckdb1 / libduckdb-dev / duckdb (CLI) split.
+
+ -- Michal J. Gajda <mjgajda@gmail.com>  Sun, 17 May 2026 00:00:00 +0000

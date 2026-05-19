@@ -1,0 +1,83 @@
+Source: duckdb
+Section: database
+Priority: optional
+Maintainer: Michal J. Gajda <mjgajda@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake (>= 3.14),
+ ninja-build,
+# Upstream requires only a C++11 compiler; g++ (>= 11) is this packaging's
+# choice to get reliable C++17 + GCC 11 hardening defaults across all
+# supported targets (Debian trixie, Ubuntu jammy/noble).  Override with
+# CC/CXX to opt in to clang.
+ g++ (>= 11) <!cross>,
+ git,
+ pandoc <!nodoc>,
+ pkgconf,
+ python3,
+Standards-Version: 4.7.0
+Homepage: https://duckdb.org/
+# Vcs-* point at this packaging fork (not upstream duckdb/duckdb)
+# per Debian Policy 5.6.26 — they describe where this *source
+# package* is maintained, which is here, not upstream.  Upstream's
+# repository is recorded separately in debian/upstream/metadata.
+Vcs-Browser: https://github.com/mjgajda/duckdb
+Vcs-Git: https://github.com/mjgajda/duckdb.git -b debian/latest
+# Bugs against the packaging only.  Bugs in DuckDB itself should
+# go to https://github.com/duckdb/duckdb/issues per
+# debian/upstream/metadata.
+Bugs: https://github.com/mjgajda/duckdb/issues
+Rules-Requires-Root: no
+
+Package: libduckdb1
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: in-process analytical SQL database (shared library)
+ DuckDB is an in-process SQL OLAP database management system with a
+ vectorised execution engine, columnar storage, MVCC transactions and
+ broad support for the SQL standard, including window functions, CTEs
+ and complex types (arrays, structs, maps).
+ .
+ The shared library statically embeds the following in-tree
+ extensions, so no additional download is required at runtime:
+ autocomplete, core_functions, icu (Unicode collation and timezones),
+ json (read_json / JSON functions) and parquet (read_parquet /
+ COPY ... TO ... FORMAT PARQUET).
+ .
+ This package contains the shared library libduckdb.so required at
+ runtime by programs that link against DuckDB.
+
+Package: libduckdb-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libduckdb1 (= ${binary:Version}), ${misc:Depends}
+Description: in-process analytical SQL database (development files)
+ DuckDB is an in-process SQL OLAP database management system with a
+ vectorised execution engine, columnar storage, MVCC transactions and
+ broad support for the SQL standard, including window functions, CTEs
+ and complex types (arrays, structs, maps).
+ .
+ This package contains the C and C++ headers (duckdb.h, duckdb.hpp and
+ the duckdb/ tree), the unversioned libduckdb.so symlink, and the
+ CMake package config files (DuckDBConfig.cmake, DuckDBConfigVersion.cmake)
+ needed to build software against DuckDB.  A worked C-API extension
+ example (demo_capi) is shipped under
+ /usr/share/doc/libduckdb-dev/examples/.
+
+Package: duckdb
+Section: database
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: in-process analytical SQL database (command-line shell)
+ DuckDB is an in-process SQL OLAP database management system with a
+ vectorised execution engine, columnar storage, MVCC transactions and
+ broad support for the SQL standard, including window functions, CTEs
+ and complex types (arrays, structs, maps).
+ .
+ This package contains the duckdb command-line shell, an interactive
+ SQL client that can open DuckDB database files and query data in
+ CSV, Parquet, JSON and other formats.

@@ -1,0 +1,46 @@
+#!/bin/sh
+# DEP-8 test: persistence across processes.  Process A creates a
+# file-backed database, writes a row, and exits.  Process B opens
+# the same file and reads the row.  Verifies that the storage
+# layer commits to disk on close (and that the storage format
+# the build produces is the storage format it can read).
+
+set -eu
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+
+db=two-process.duckdb
+rm -f "$db"
+
+echo "== process A: write =="
+duckdb "$db" <<'SQL'
+CREATE TABLE message (id INTEGER, body VARCHAR);
+INSERT INTO message VALUES (1, 'hello from process A');
+SQL
+
+# duckdb's CLI exits after the heredoc closes, which closes the
+# database.  The file on disk must now be readable by a fresh
+# process.
+
+if [ ! -s "$db" ]; then
+    echo "FAIL: $db is missing or empty after process A" >&2
+    exit 1
+fi
+echo "($db is $(wc -c < "$db") bytes on disk)"
+
+echo
+echo "== process B: read =="
+got=$(duckdb "$db" -readonly <<'SQL'
+SELECT body FROM message WHERE id = 1;
+SQL
+)
+echo "$got"
+
+case "$got" in
+    *"hello from process A"*)
+        echo "two-process-rw: OK"
+        ;;
+    *)
+        echo "FAIL: did not read back expected row" >&2
+        exit 1
+        ;;
+esac

@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!--
+  OBS source service definition for home:mjgajda/duckdb.
+
+  This file is the canonical copy.  It is mirrored to the root of
+  the OBS package working copy (NOT inside any subdirectory) by
+  debian/scripts/publish.sh; see debian/README.OBS.
+
+  Pipeline on every `osc service runall` (or implicit run on commit):
+
+    tar_scm     git clone --depth=... github.com/mjgajda/duckdb
+                at the given revision, snapshot as duckdb-<VERSION>.tar
+    recompress  tar -> tar.xz
+    set_version rewrite the version field in the .dsc/spec from
+                versionformat=
+
+  The "manual" mode means OBS only re-fetches when explicitly
+  asked, never on its own schedule.  This keeps publishing
+  laptop-driven: CI cannot trigger an OBS build by accident.
+-->
+<services>
+  <service name="tar_scm" mode="manual">
+    <param name="scm">git</param>
+    <param name="url">https://github.com/mjgajda/duckdb.git</param>
+    <param name="subdir">.</param>
+    <param name="revision">debian/latest</param>
+    <!--
+      @PARENT_TAG@   nearest reachable annotated tag (e.g. v1.5.2)
+      @TAG_OFFSET@   commits since that tag
+      %h             short commit hash
+      versionrewrite-pattern strips the leading 'v' from the tag.
+    -->
+    <param name="versionformat">@PARENT_TAG@+git@TAG_OFFSET@.%h</param>
+    <param name="versionrewrite-pattern">v(.*)</param>
+    <param name="versionrewrite-replacement">\1</param>
+    <param name="filename">duckdb</param>
+    <param name="package-meta">no</param>
+    <param name="changesgenerate">disable</param>
+  </service>
+  <service name="recompress" mode="manual">
+    <param name="file">duckdb-*.tar</param>
+    <param name="compression">xz</param>
+  </service>
+  <service name="set_version" mode="manual"/>
+</services>

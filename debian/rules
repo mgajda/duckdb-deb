@@ -1,0 +1,147 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Cap parallelism to fit an 8 GiB RAM budget.
+#
+# DuckDB's amalgamated sources instantiate heavy templates from
+# duckdb.hpp (~5 MB of inline code).  Empirically each g++ instance
+# peaks at ~1.5-2 GB RSS during compile and the final link peaks at
+# ~3-4 GB.  So:
+#
+#   8 GiB budget - 1 GB linker headroom = 7 GB for parallel g++
+#   7 GB / ~1.75 GB per g++           = 4 jobs
+#
+# That is the canonical packaging budget: this build is required to
+# complete on a machine that can spare 8 GiB for it, no more.
+# Letting debhelper default to nproc on a 12-core developer machine
+# needs ~18 GB and OOMs anything short of a workstation.
+#
+# Builders with more headroom can override at invocation time:
+#
+#   DEB_BUILD_OPTIONS="parallel=12 hardening=+all" dpkg-buildpackage ...
+#
+# If upstream's per-process memory cost ever rises (more templates,
+# new heavy extensions baked in), redo the arithmetic above and
+# adjust the cap; do not just raise the budget silently.
+ifeq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+  DEB_BUILD_OPTIONS += parallel=4
+  export DEB_BUILD_OPTIONS
+endif
+
+# Upstream portion of the Debian package version (everything before the
+# trailing "-<revision>").  May contain a "+git<date>.<hash>" suffix when
+# packaging a development snapshot.
+DEB_VERSION_UPSTREAM := $(shell dpkg-parsechangelog -SVersion | sed 's/-[^-]*$$//')
+
+# Extract just the X.Y.Z prefix to feed OVERRIDE_GIT_DESCRIBE, since the
+# DuckDB CMake script parses it with a strict regex that does not accept
+# Debian-style version suffixes.
+DUCKDB_XYZ := $(shell echo $(DEB_VERSION_UPSTREAM) | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+
+# Embed the real git short hash into the built binary so `duckdb --version`
+# points at the actual upstream commit being packaged.  Fall back to a
+# stable placeholder when building outside a git checkout (e.g. from a
+# released source tarball).
+DUCKDB_GIT_HASH := $(shell git rev-parse --short=10 HEAD 2>/dev/null || echo 0000000000)
+
+# In-tree extensions to bake into the shared library and CLI.  The list
+# omits "delta" (experimental, requires a Rust toolchain), "jemalloc"
+# (statically links a vendored copy of jemalloc that fights Debian's
+# system libjemalloc2 and its debug tooling), and "tpcds"/"tpch" (which
+# only provide benchmark schema generators of no use to most users).
+# "demo_capi" is not loaded; its sources are shipped as a C API
+# example under libduckdb-dev's documentation directory.
+DUCKDB_EXTENSIONS := autocomplete;core_functions;icu;json;parquet
+
+%:
+	dh $@ --buildsystem=cmake+ninja --builddirectory=build/deb
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DBUILD_UNITTESTS=OFF \
+	    -DBUILD_SHELL=ON \
+	    -DBUILD_EXTENSIONS="$(DUCKDB_EXTENSIONS)" \
+	    -DSET_DUCKDB_LIBRARY_VERSION=ON \
+	    -DDISABLE_UNITY=ON \
+	    -DOVERRIDE_GIT_DESCRIBE=v$(DUCKDB_XYZ)-0-g$(DUCKDB_GIT_HASH)
+
+# DISABLE_UNITY=ON above is what keeps the 8 GiB memory budget
+# honest.  Upstream's default "unity build" concatenates many .cpp
+# files into a few hundred huge translation units (ub_*.cpp); each
+# one peaks at ~4-6 GB RSS to compile, so even -j2 risks OOM on
+# anything under 12 GiB.  With unity disabled, each .cpp is
+# compiled separately and peaks under ~1 GB, which fits the
+# parallel=4 cap above comfortably.  Trade-off: wall-clock time
+# rises ~30% because cross-file inlining opportunities are lost.
+# Reproducibility and predictable memory use win out for packaging.
+
+override_dh_auto_test:
+	# Unit tests are not built (BUILD_UNITTESTS=OFF) to keep package
+	# builds fast; run `make allunit` separately for upstream validation.
+
+# Skip dh_dwz.  dwz(1) compresses DWARF debug info by deduplicating
+# DIE entries across compilation units, but it bails with "Too many
+# DIEs, not optimizing" when a single binary exceeds its internal
+# limit (~2^28 DIEs per .debug_info section).  Both libduckdb.so
+# and the duckdb CLI blow past that ceiling because duckdb.hpp
+# instantiates very large numbers of templates -- the same property
+# that makes the unity build so memory-hungry (see DISABLE_UNITY
+# comment above).  We therefore ship un-deduplicated debug info,
+# which is bit-for-bit reproducible and only costs disk space.
+# Other large C++ projects (LLVM, Firefox, Chromium) follow the
+# same pattern in their Debian packaging.
+override_dh_dwz:
+
+# Convert the hand-authored Markdown manpage source to roff with
+# pandoc.  Skipped under DEB_BUILD_OPTIONS=nodoc.  Pure source-to-source
+# conversion, so cross-builds are fine (unlike help2man, which would
+# need to execute the foreign-arch binary).
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+execute_after_dh_auto_build-arch: debian/duckdb.1
+execute_after_dh_auto_build-indep: debian/duckdb.1
+endif
+
+debian/duckdb.1: debian/duckdb.1.md
+	pandoc --standalone --to=man \
+	    --variable=section:1 \
+	    --variable=footer:"duckdb $(DUCKDB_XYZ)" \
+	    --variable=header:"User Commands" \
+	    --output=$@ $<
+
+# We do not ship libduckdb_static.a.  Upstream CMake installs it
+# unconditionally; delete it from the staging tree before dh_install
+# runs so dh_missing --fail-missing stays clean.
+override_dh_auto_install:
+	dh_auto_install
+	find debian/tmp -name 'libduckdb_static.a' -delete
+
+# Remove the generated manpage in dh_clean so source builds are
+# reproducible regardless of whether a previous build ran help2man.
+override_dh_clean:
+	dh_clean
+	rm -f debian/duckdb.1
+
+# Ship the per-component LICENSE files from third_party/ inside
+# libduckdb-dev's doc directory so the binary package is self-contained
+# with respect to upstream licensing of vendored dependencies.  Also
+# ship the demo_capi extension sources as a worked C API example.
+override_dh_installdocs:
+	dh_installdocs
+	install -d debian/libduckdb-dev/usr/share/doc/libduckdb-dev/third_party-licenses
+	set -e; for d in third_party/*/; do \
+	    name=$$(basename "$$d"); \
+	    if [ -f "$$d/LICENSE" ]; then \
+	        install -m 0644 "$$d/LICENSE" \
+	            "debian/libduckdb-dev/usr/share/doc/libduckdb-dev/third_party-licenses/$$name.LICENSE"; \
+	    fi; \
+	done
+	install -d debian/libduckdb-dev/usr/share/doc/libduckdb-dev/examples/demo_capi
+	install -m 0644 extension/demo_capi/CMakeLists.txt \
+	    extension/demo_capi/add_numbers.cpp \
+	    extension/demo_capi/capi_demo.cpp \
+	    debian/libduckdb-dev/usr/share/doc/libduckdb-dev/examples/demo_capi/
+	install -d debian/libduckdb-dev/usr/share/doc/libduckdb-dev/examples/demo_capi/include
+	install -m 0644 extension/demo_capi/include/add_numbers.h \
+	    debian/libduckdb-dev/usr/share/doc/libduckdb-dev/examples/demo_capi/include/

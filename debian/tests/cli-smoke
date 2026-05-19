@@ -1,0 +1,32 @@
+#!/bin/sh
+# DEP-8 test: smoke-check the duckdb CLI against the installed
+# .deb.  Verifies the binary launches, advertises a sane version,
+# and can execute a single statement in non-interactive mode.
+
+set -eu
+
+echo "== duckdb --version =="
+duckdb --version
+echo
+
+echo "== one-shot query against in-memory db =="
+# -c runs SQL and exits; stdin is closed so we don't hang on REPL.
+result=$(duckdb -c 'select 42 as answer' </dev/null)
+echo "$result"
+
+# Loose substring check: any output format prints '42' somewhere.
+case "$result" in
+    *42*) ;;
+    *)
+        echo "FAIL: expected '42' in output, got: $result" >&2
+        exit 1
+        ;;
+esac
+
+echo
+echo "== exit status of failed query is non-zero =="
+if duckdb -c 'select * from no_such_table' </dev/null 2>/dev/null; then
+    echo "FAIL: failed query returned exit status 0" >&2
+    exit 1
+fi
+echo "(failed query exited non-zero as expected)"

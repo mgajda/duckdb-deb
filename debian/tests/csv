@@ -1,0 +1,46 @@
+#!/bin/sh
+# DEP-8 test: round-trip a CSV file through the DuckDB CLI.
+# Verifies that the bundled csv reader/writer (part of core
+# DuckDB, not a separate extension) works in the installed CLI.
+#
+# Failure modes this catches:
+#   - csv parser silently disabled in the build
+#   - locale / encoding mismatch in COPY ... TO
+#   - storage version regression that breaks COPY ... FROM
+
+set -eu
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+
+cat > input.csv <<'EOF'
+id,name,score
+1,alpha,3.14
+2,beta,2.71
+3,gamma,1.41
+EOF
+
+echo "== COPY FROM CSV =="
+duckdb test.duckdb <<'SQL'
+CREATE TABLE measurements (id INTEGER, name VARCHAR, score DOUBLE);
+COPY measurements FROM 'input.csv' (HEADER, DELIMITER ',');
+SELECT count(*) AS n FROM measurements;
+SQL
+
+echo
+echo "== COPY TO CSV =="
+duckdb test.duckdb <<'SQL'
+COPY (SELECT * FROM measurements ORDER BY id) TO 'output.csv' (HEADER, DELIMITER ',');
+SQL
+
+echo
+echo "== diff input vs round-tripped output =="
+# DuckDB writes its CSV with the same header and row order we
+# inserted; any byte-level difference is a real regression.
+diff -u input.csv output.csv
+
+echo
+echo "== round-trip count =="
+n=$(duckdb test.duckdb -c "SELECT count(*) FROM measurements" -noheader -list)
+case "$n" in
+    *3*) echo "csv: OK ($n rows round-tripped)" ;;
+    *)   echo "FAIL: expected 3 rows, got $n" >&2; exit 1 ;;
+esac
