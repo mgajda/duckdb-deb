@@ -44,7 +44,7 @@
 #       separately installable Debian packages.
 #
 #   bugs-field-does-not-refer-to-debian-infrastructure
-#       The Bugs: field points at https://github.com/mjgajda/duckdb/issues
+#       The Bugs: field points at https://github.com/mgajda/duckdb-deb/issues
 #       on purpose -- this packaging fork lives outside Debian BTS and
 #       wants reports to land where the packaging maintainer can act on
 #       them.  See debian/control's comment above the Bugs: line.  If
@@ -54,14 +54,29 @@
 #   initial-upload-closes-no-bugs
 #       debian/changelog has only one entry and no Closes: #NNN because
 #       this packaging never went through Debian's ITP process (the
-#       upload destination is github.com/mjgajda/duckdb and the OBS
+#       upload destination is github.com/mgajda/duckdb-deb and the OBS
 #       PPA, not bugs.debian.org).  When/if we file an ITP for Debian
 #       proper, the entry will reference it and this suppression goes
 #       away.
+#
+#   elf-error
+#       Lintian 2.114 (Ubuntu jammy / noble) wrongly reports
+#       "elf-error In program headers: Unable to find program interpreter
+#       name" against detached debug-info files in
+#       usr/lib/debug/.build-id/<aa>/<hash>.debug.  Those files are
+#       intentionally not standalone ELF executables -- they are stripped
+#       debug-info containers carrying a PT_INTERP stub that lintian's
+#       ELF scanner of that vintage misreads as a missing interpreter.
+#       Newer lintian (Debian trixie+ ships 2.117) does not emit this
+#       false positive.  The detached-debug-info layout is exactly what
+#       dh_strip --automatic-dbgsym produces and is reproducible across
+#       distros, so the .debug files themselves are fine.  Removing this
+#       suppression once Ubuntu LTS rolls forward to a fixed lintian
+#       (likely 24.04 + a stable update, or 26.04 LTS) is harmless.
 
 set -eu
 
-SUPPRESS_TAGS='orig-tarball-missing-upstream-signature,bad-distribution-in-changes-file,source-is-missing,source-contains-prebuilt-javascript-object,very-long-line-length-in-source-file,embedded-library,bugs-field-does-not-refer-to-debian-infrastructure,initial-upload-closes-no-bugs'
+SUPPRESS_TAGS='orig-tarball-missing-upstream-signature,bad-distribution-in-changes-file,source-is-missing,source-contains-prebuilt-javascript-object,very-long-line-length-in-source-file,embedded-library,bugs-field-does-not-refer-to-debian-infrastructure,initial-upload-closes-no-bugs,elf-error'
 
 # Find a .changes file to lint.  Two common locations:
 #   ../             — default of dpkg-buildpackage

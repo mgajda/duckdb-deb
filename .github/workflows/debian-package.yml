@@ -138,7 +138,33 @@ jobs:
           apt-get install -y --no-install-recommends equivs
           mk-build-deps --install --remove --tool='apt-get -y --no-install-recommends' debian/control
 
+      - name: Generate orig tarball
+        # 3.0 (quilt) source format requires <pkg>_<upstream-version>.orig.tar.*
+        # in the parent directory; the .dsc references it by SHA256.  For
+        # snapshot builds (where there is no upstream release tarball to
+        # download) we synthesise one with git archive, excluding the
+        # packaging tree and any local/scratch files so the orig matches
+        # what `dpkg-source -b` expects: pristine upstream sources only.
+        #
+        # The version with the "-N" Debian revision stripped is what
+        # dpkg-source looks for; dpkg-parsechangelog -S Version gives the
+        # full version, we drop the trailing "-N" to get upstream-only.
+        run: |
+          set -eu
+          upstream_version=$(dpkg-parsechangelog -S Version | sed 's/-[^-]*$//')
+          orig_name="duckdb_${upstream_version}.orig.tar.xz"
+          echo "Building $orig_name from HEAD (excluding debian/, .git/, scratch)"
+          # git archive HEAD respects .gitattributes export-ignore; we do
+          # not currently use those, so prune debian/ explicitly via tar.
+          git archive --format=tar HEAD \
+              | tar --delete debian \
+              | xz -T0 > "../$orig_name"
+          ls -lh "../$orig_name"
+
       - name: Build source package
+        # -d skips the build-dep check (mk-build-deps already installed
+        # them).  -S says source-only.  The orig tarball generated above
+        # is what dpkg-source -b looks for.
         run: dpkg-buildpackage -us -uc -S -d
 
       - name: Stage source package into workspace

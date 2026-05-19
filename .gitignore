@@ -372,3 +372,10 @@ generated_extension_loader_package_build.cpp
 # nuisance across rebuilds; leave them in the tree, just ignored.
 /q
 /clanker.sh
+
+# quilt's per-patch working directory.  dpkg-source applies the patch
+# series during --before-build (creating .pc/) and unapplies during
+# --after-build (which is supposed to remove it but does not always
+# tidy completely).  Ignore wholesale -- the canonical state is the
+# patch series in debian/patches/.
+/.pc/

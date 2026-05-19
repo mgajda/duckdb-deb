@@ -21,12 +21,12 @@ Homepage: https://duckdb.org/
 # per Debian Policy 5.6.26 — they describe where this *source
 # package* is maintained, which is here, not upstream.  Upstream's
 # repository is recorded separately in debian/upstream/metadata.
-Vcs-Browser: https://github.com/mjgajda/duckdb
-Vcs-Git: https://github.com/mjgajda/duckdb.git -b debian/latest
+Vcs-Browser: https://github.com/mgajda/duckdb-deb
+Vcs-Git: https://github.com/mgajda/duckdb-deb.git -b debian/latest
 # Bugs against the packaging only.  Bugs in DuckDB itself should
 # go to https://github.com/duckdb/duckdb/issues per
 # debian/upstream/metadata.
-Bugs: https://github.com/mjgajda/duckdb/issues
+Bugs: https://github.com/mgajda/duckdb-deb/issues
 Rules-Requires-Root: no
 
 Package: libduckdb1
