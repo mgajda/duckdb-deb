@@ -1,0 +1,102 @@
+#!/bin/sh
+# DEP-8 test: build the duckdb-ffi Haskell binding (from Hackage)
+# against the installed libduckdb-dev.
+#
+# Why this test exists
+# --------------------
+# The C and C++ link tests (c-link, cxx-link) prove the installed
+# duckdb.h + libduckdb.so work from hand-written C/C++.  This test
+# goes one step further: it proves a real third-party *language
+# binding* -- the duckdb-ffi package on Hackage -- can be built and
+# linked against the packaged library.  duckdb-ffi declares
+# `extra-libraries: duckdb`, so a successful build exercises exactly
+# the libduckdb1 / libduckdb-dev ABI surface a downstream Haskell
+# user would hit.
+#
+# GHC version gate
+# ----------------
+# duckdb-ffi 1.5.x requires GHC >= 9.6.  Debian trixie (9.6) and sid
+# (9.10) satisfy this; Ubuntu jammy (8.8) and noble (9.4) do not.
+# On a too-old GHC the test exits 77 (the autopkgtest "skip" code)
+# rather than failing -- an old compiler is not a packaging defect
+# of libduckdb-dev.
+#
+# Network
+# -------
+# cabal downloads duckdb-ffi and its dependency closure from
+# Hackage.  The test is marked needs-internet + flaky in
+# debian/tests/control accordingly.
+
+set -eu
+
+SKIP=77   # autopkgtest: test could not be run, report as skipped
+
+cd "${AUTOPKGTEST_TMP:-/tmp}"
+
+echo "== checking GHC availability and version =="
+if ! command -v ghc >/dev/null 2>&1; then
+    echo "SKIP: ghc not found on PATH" >&2
+    exit "$SKIP"
+fi
+if ! command -v cabal >/dev/null 2>&1; then
+    echo "SKIP: cabal not found on PATH" >&2
+    exit "$SKIP"
+fi
+
+ghc_version=$(ghc --numeric-version)
+echo "found GHC $ghc_version"
+
+# Require GHC >= 9.6.  Compare major.minor numerically.
+ghc_major=$(echo "$ghc_version" | cut -d. -f1)
+ghc_minor=$(echo "$ghc_version" | cut -d. -f2)
+if [ "$ghc_major" -lt 9 ] || { [ "$ghc_major" -eq 9 ] && [ "$ghc_minor" -lt 6 ]; }; then
+    echo "SKIP: GHC $ghc_version is older than 9.6, which duckdb-ffi requires" >&2
+    exit "$SKIP"
+fi
+
+echo
+echo "== confirming the installed libduckdb is present =="
+# duckdb-ffi links -lduckdb; the .so comes from libduckdb1, the
+# unversioned symlink + duckdb.h from libduckdb-dev.  If these are
+# missing the packaging is broken -- that is a real FAIL, not a skip.
+if ! ls /usr/lib/*/libduckdb.so >/dev/null 2>&1; then
+    echo "FAIL: /usr/lib/*/libduckdb.so not found -- libduckdb-dev not installed?" >&2
+    exit 1
+fi
+if [ ! -f /usr/include/duckdb.h ]; then
+    echo "FAIL: /usr/include/duckdb.h not found -- libduckdb-dev not installed?" >&2
+    exit 1
+fi
+
+echo
+echo "== updating cabal package index =="
+# A fresh cabal in a clean testbed has no package index.
+cabal update 2>&1 | tail -3
+
+echo
+echo "== building duckdb-ffi from Hackage against the installed libduckdb =="
+# `cabal build` in an empty project dir: ask cabal to build the
+# duckdb-ffi package directly.  --package-env forces an isolated
+# environment in AUTOPKGTEST_TMP so nothing leaks to the host.
+mkdir -p hs-build
+cd hs-build
+
+# A one-line cabal.project pointing at the Hackage package, plus a
+# tiny stanza so `cabal build` has a target.  Using `cabal get`
+# fetches the source so we build the real binding code, including
+# its cbits/duckdb_stub.c, against the installed library.
+cabal get duckdb-ffi 2>&1 | tail -3
+cd duckdb-ffi-*/
+
+echo
+echo "== cabal build (compiles cbits + links -lduckdb) =="
+# This is the core of the test.  If duckdb-ffi compiles its
+# cbits/duckdb_stub.c and links against the installed libduckdb.so
+# without error, the packaged headers + shared library are good.
+if cabal build all 2>&1 | tail -25; then
+    echo
+    echo "haskell-link: OK (duckdb-ffi built against installed libduckdb)"
+else
+    echo "FAIL: cabal build of duckdb-ffi failed" >&2
+    exit 1
+fi

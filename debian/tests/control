@@ -33,3 +33,20 @@ Depends: duckdb
 # a compiler available at test time.
 Tests: c-link, cxx-link, arrow, multithread
 Depends: libduckdb-dev, build-essential
+
+# Haskell binding link test: build the duckdb-ffi binding from
+# Hackage against the installed libduckdb-dev.  duckdb-ffi declares
+# `extra-libraries: duckdb`, so a successful build proves the
+# installed duckdb.h + libduckdb.so are usable from a real
+# third-party language binding -- not just from hand-written C.
+#
+# Restrictions:
+#   needs-internet  -- cabal downloads duckdb-ffi + its dependency
+#                      closure from Hackage at test time.
+#   flaky           -- a Hackage outage or a transient cabal
+#                      resolver failure is an infrastructure
+#                      problem, not a packaging defect; mark flaky
+#                      so such failures do not block.
+Tests: haskell-link
+Depends: libduckdb-dev, build-essential, ghc, cabal-install
+Restrictions: needs-internet, flaky
