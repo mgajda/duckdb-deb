@@ -1,6 +1,10 @@
 Source: duckdb
 Section: database
-Priority: optional
+# Per Debian Policy 5.6.6 (since 4.7.3), Priority: in the Source
+# stanza is no longer recommended when it equals the default
+# ("optional").  Binary packages inherit the priority from the
+# source stanza, so omitting it here means all three binaries
+# default to optional -- which is what we want.
 Maintainer: Michal J. Gajda <mjgajda@gmail.com>
 Build-Depends:
  debhelper-compat (= 13),
@@ -15,7 +19,7 @@ Build-Depends:
  pandoc <!nodoc>,
  pkgconf,
  python3,
-Standards-Version: 4.7.0
+Standards-Version: 4.7.4
 Homepage: https://duckdb.org/
 # Vcs-* point at this packaging fork (not upstream duckdb/duckdb)
 # per Debian Policy 5.6.26 — they describe where this *source

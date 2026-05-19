@@ -18,7 +18,7 @@ Why OBS (and not a Launchpad PPA)
 Trust model
 -----------
 
-  - The git repository (github.com/mjgajda/duckdb, branch
+  - The git repository (github.com/mgajda/duckdb-deb, branch
     debian/latest) is the canonical source.
   - debian/obs/_service in git is the canonical copy of the OBS
     source-services definition.  The file at the root of the OBS
@@ -86,7 +86,7 @@ Package metadata template (paste into `osc meta pkg -e`)
         github.com/duckdb/duckdb that adds Debian/Ubuntu packaging
         on the debian/latest branch.
       </description>
-      <url>https://github.com/mjgajda/duckdb</url>
+      <url>https://github.com/mgajda/duckdb-deb</url>
     </package>
 
 Project metadata template (paste into `osc meta prj -e`)
@@ -129,7 +129,7 @@ Day-to-day publish loop
    debian/README.source).
 
 2. Bump debian/changelog with a new snapshot version.  Commit and
-   push to github.com/mjgajda/duckdb so OBS's tar_scm can fetch it.
+   push to github.com/mgajda/duckdb-deb so OBS's tar_scm can fetch it.
 
 3. Run CI by pushing.  Wait for .github/workflows/debian-package.yml
    to report green.

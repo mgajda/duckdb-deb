@@ -1,0 +1,46 @@
+Description: Build against Debian's libutf8proc instead of the vendored copy
+ DuckDB ships a vendored utf8proc under third_party/utf8proc/ along with
+ a thin C++ wrapper (utf8proc_wrapper.{hpp,cpp}).  This patch replaces
+ the vendored copy with a link against libutf8proc-dev's system library
+ while keeping DuckDB's wrapper on top.
+ .
+ Rationale: third_party/utf8proc/ is upstream utf8proc 2.x renamed from
+ .c to .cpp.  Debian's libutf8proc-dev ships the same upstream API with
+ the same Unicode tables.  De-vendoring removes ~2.2 MB of generated
+ data from our build tree and lets Debian's security team track utf8proc
+ CVEs centrally instead of us backporting per release.
+ .
+ The vendored header utf8proc.hpp is replaced by a shim that includes
+ the system header.  The wrapper's translation unit
+ (utf8proc_wrapper.cpp) is unchanged and compiles against the system
+ declarations.
+Author: Michal J. Gajda <mjgajda@gmail.com>
+Forwarded: not-yet
+Last-Update: 2026-05-19
+---
+diff --git a/third_party/utf8proc/CMakeLists.txt b/third_party/utf8proc/CMakeLists.txt
+--- a/third_party/utf8proc/CMakeLists.txt
++++ b/third_party/utf8proc/CMakeLists.txt
+@@ -1,15 +1,18 @@
+ if(POLICY CMP0063)
+     cmake_policy(SET CMP0063 NEW)
+ endif()
+ 
+-include_directories(include)
++# Debian de-vendoring: use system utf8proc instead of bundled
++# utf8proc.cpp + utf8proc_data.cpp.  Keep the DuckDB-specific
++# wrapper translation unit; it only uses utf8proc's public API.
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(SYSTEM_UTF8PROC REQUIRED IMPORTED_TARGET libutf8proc)
+ 
+ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+ 
+-add_library(duckdb_utf8proc STATIC utf8proc.cpp utf8proc_wrapper.cpp)
+-
++include_directories(include)
++add_library(duckdb_utf8proc STATIC utf8proc_wrapper.cpp)
++target_link_libraries(duckdb_utf8proc PUBLIC PkgConfig::SYSTEM_UTF8PROC)
+ 
+ install(TARGETS duckdb_utf8proc
+         EXPORT "${DUCKDB_EXPORT_SET}"
+         LIBRARY DESTINATION "${INSTALL_LIB_DIR}"

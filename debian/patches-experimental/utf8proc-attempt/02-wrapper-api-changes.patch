@@ -1,0 +1,22 @@
+--- third_party/utf8proc/utf8proc_wrapper.cpp	2026-05-17 16:03:22.464874232 +0000
++++ .worktree-devendor-test/third_party/utf8proc/utf8proc_wrapper.cpp	2026-05-19 12:09:20.515803734 +0000
+@@ -154,7 +154,18 @@
+ char *Utf8Proc::Normalize(const char *s, size_t len) {
+ 	assert(s);
+ 	assert(Utf8Proc::Analyze(s, len) != UnicodeType::INVALID);
+-	return (char *)utf8proc_NFC((const utf8proc_uint8_t *)s, len);
++	// utf8proc 2.10+ changed utf8proc_NFC to take only a NUL-terminated
++	// string.  Use the lower-level utf8proc_map() which accepts an
++	// explicit length and applies the same NFC composition that the
++	// old 2-arg utf8proc_NFC() used internally.
++	utf8proc_uint8_t *dst = nullptr;
++	auto opts = (utf8proc_option_t)(UTF8PROC_STABLE | UTF8PROC_COMPOSE);
++	auto rc = utf8proc_map((const utf8proc_uint8_t *)s,
++	                       (utf8proc_ssize_t)len, &dst, opts);
++	if (rc < 0) {
++		return nullptr;  // caller checks for null
++	}
++	return (char *)dst;
+ }
+ 
+ bool Utf8Proc::IsValid(const char *s, size_t len) {

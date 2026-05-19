@@ -1,0 +1,26 @@
+--- third_party/utf8proc/CMakeLists.txt	2026-05-17 16:03:22.458874288 +0000
++++ .worktree-devendor-test/third_party/utf8proc/CMakeLists.txt	2026-05-19 11:53:25.720036095 +0000
+@@ -2,10 +2,21 @@
+     cmake_policy(SET CMP0063 NEW)
+ endif()
+ 
+-include_directories(include)
++# Debian de-vendoring: use system utf8proc instead of bundled
++# utf8proc.cpp + utf8proc_data.cpp.  Keep DuckDB's wrapper translation
++# unit; it only uses utf8proc's public API.  The bundled header
++# utf8proc.hpp is kept as a thin declaration mirror -- it matches
++# upstream utf8proc.h byte-for-byte (it is upstream utf8proc.h renamed
++# .h -> .hpp), so DuckDB sources that #include "utf8proc.hpp" link
++# correctly against the system .so.
++find_package(PkgConfig REQUIRED)
++pkg_check_modules(SYSTEM_UTF8PROC REQUIRED IMPORTED_TARGET libutf8proc)
+ 
+-add_library(duckdb_utf8proc STATIC utf8proc.cpp utf8proc_wrapper.cpp)
++set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+ 
++include_directories(include)
++add_library(duckdb_utf8proc STATIC utf8proc_wrapper.cpp)
++target_link_libraries(duckdb_utf8proc PUBLIC PkgConfig::SYSTEM_UTF8PROC)
+ 
+ install(TARGETS duckdb_utf8proc
+         EXPORT "${DUCKDB_EXPORT_SET}"

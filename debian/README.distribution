@@ -27,7 +27,7 @@ Every tagged release (v*) attaches its full build matrix to the
 GitHub Release page.  Find the matching `.deb` for your
 distribution at:
 
-    https://github.com/mjgajda/duckdb/releases
+    https://github.com/mgajda/duckdb-deb/releases
 
 The filename includes the distribution codename and architecture,
 e.g.:
@@ -37,7 +37,7 @@ e.g.:
 
 For untagged development snapshots, builds also appear as workflow
 artefacts under
-https://github.com/mjgajda/duckdb/actions/workflows/debian-package.yml
+https://github.com/mgajda/duckdb-deb/actions/workflows/debian-package.yml
 — but those are retained for 30 days only.  Use a tagged release if
 you need a stable URL.
 
@@ -59,11 +59,11 @@ Verifying downloads
 The .deb files are not signed by an individual GPG key.  GitHub
 serves them over HTTPS from github-releases.githubusercontent.com,
 which gives you transport-level integrity but not author
-authentication beyond "whoever owns the github.com/mjgajda
+authentication beyond "whoever owns the github.com/mgajda
 account uploaded this".
 
 If you need stronger guarantees, build from source: clone
-github.com/mjgajda/duckdb at the matching tag and run
+github.com/mgajda/duckdb-deb at the matching tag and run
 `dpkg-buildpackage -us -uc -b` yourself.  See debian/README.source
 for the build prerequisites.
 
@@ -101,5 +101,5 @@ both available in those releases without backports.
 Reporting bugs
 --------------
 
-Packaging bugs: https://github.com/mjgajda/duckdb/issues
+Packaging bugs: https://github.com/mgajda/duckdb-deb/issues
 DuckDB itself: https://github.com/duckdb/duckdb/issues
