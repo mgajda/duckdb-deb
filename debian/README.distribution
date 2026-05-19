@@ -9,21 +9,51 @@ debian/README.OBS.
 Available channels
 ------------------
 
-  1. GitHub Release downloads (available now)
-  2. openSUSE Build Service apt repository (planned; pending OBS
-     account activation)
+  1. GitHub Pages apt repository (recommended — one-line apt install)
+     See debian/README.apt-pages.  Debian + Ubuntu, amd64 + arm64.
+  2. GitHub Release downloads (manual .deb download, no apt update).
+  3. Launchpad PPA (Ubuntu only).  See debian/README.PPA.
+  4. openSUSE Build Service apt repository (planned; pending OBS
+     account activation).  See debian/README.OBS.
 
-Both produce the same three binary packages built from the same
+All four produce the same three binary packages built from the same
 source:
 
   libduckdb1      shared library
   libduckdb-dev   headers + .so symlink + CMake config + example
   duckdb          command-line shell
 
-1. GitHub Release downloads
+1. GitHub Pages apt repository (recommended)
+--------------------------------------------
+
+The packaging fork ships its own apt repository at
+https://mgajda.github.io/duckdb-deb/ — one-line `apt install duckdb`
+once you've added the source.
+
+Three-step install (replace SUITE with trixie / sid / jammy / noble
+to match your distribution):
+
+    sudo install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://mgajda.github.io/duckdb-deb/duckdb-deb-archive-key.asc \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/duckdb-deb.gpg
+
+    echo "deb [signed-by=/etc/apt/keyrings/duckdb-deb.gpg] \
+          https://mgajda.github.io/duckdb-deb SUITE main" \
+        | sudo tee /etc/apt/sources.list.d/duckdb-deb.list
+
+    sudo apt-get update
+    sudo apt-get install duckdb libduckdb-dev
+
+This channel signs every Release with the maintainer's GPG key
+(verifiable at the URL above), gets automatic upgrades via
+`apt update`, and supports both amd64 and arm64.  Full instructions
+including key-rotation procedure are in debian/README.apt-pages.
+
+2. GitHub Release downloads
 ---------------------------
 
-Every tagged release (v*) attaches its full build matrix to the
+For users who prefer not to add a third-party apt source, every
+tagged release (v*) attaches its full build matrix to the
 GitHub Release page.  Find the matching `.deb` for your
 distribution at:
 
@@ -51,23 +81,37 @@ dependencies for you.
 Upgrades are manual: re-download the new release's .debs and
 `sudo apt install ./*.deb` again.  This is the trade-off of the
 "download from a release page" model.  For automatic upgrades via
-`apt update`, use channel 2 once it's live.
+`apt update`, use channel 1 above.
 
 Verifying downloads
 -------------------
 
-The .deb files are not signed by an individual GPG key.  GitHub
-serves them over HTTPS from github-releases.githubusercontent.com,
-which gives you transport-level integrity but not author
-authentication beyond "whoever owns the github.com/mgajda
-account uploaded this".
+The .deb files served from a GH Release are not GPG-signed by an
+individual key.  GitHub serves them over HTTPS from
+github-releases.githubusercontent.com, which gives you
+transport-level integrity but not author authentication beyond
+"whoever owns the github.com/mgajda account uploaded this".
 
-If you need stronger guarantees, build from source: clone
+If you need stronger guarantees, use channel 1 (apt repo with
+signed Release files), or build from source: clone
 github.com/mgajda/duckdb-deb at the matching tag and run
 `dpkg-buildpackage -us -uc -b` yourself.  See debian/README.source
 for the build prerequisites.
 
-2. OBS apt repository (planned)
+3. Launchpad PPA (planned)
+--------------------------
+
+Once active, install via:
+
+    sudo add-apt-repository ppa:mgajda/duckdb-deb
+    sudo apt-get update
+    sudo apt-get install duckdb libduckdb-dev
+
+Ubuntu only (Launchpad-side limitation; Debian users should use
+channel 1).  See debian/README.PPA for the maintainer's
+publishing workflow and the current status of PPA activation.
+
+4. OBS apt repository (planned)
 -------------------------------
 
 Once the OBS account is active, this section will become:
@@ -80,19 +124,21 @@ Once the OBS account is active, this section will become:
     sudo apt install duckdb
 
 with one entry per supported target (Debian_13, Debian_Unstable,
-xUbuntu_22.04, xUbuntu_24.04).  Until then, use channel 1.
+xUbuntu_22.04, xUbuntu_24.04).  Until then, use channel 1 or 2.
 
 Supported distributions
 -----------------------
 
-  Debian 13 (trixie)        amd64
-  Debian unstable (sid)     amd64
-  Ubuntu 22.04 (jammy)      amd64
-  Ubuntu 24.04 (noble)      amd64
+  Debian 13 (trixie)        amd64, arm64
+  Debian unstable (sid)     amd64, arm64
+  Ubuntu 22.04 (jammy)      amd64, arm64
+  Ubuntu 24.04 (noble)      amd64, arm64
 
-arm64 builds are not currently produced by CI (the GitHub-hosted
-runners are amd64 only).  They are planned for the OBS channel,
-which has arm64 builders.
+riscv64 is built under qemu-user emulation in CI as a forward-
+looking signal (see debian-sid-riscv64 in the workflow) but is
+NOT yet promoted to the apt repo — there is no native riscv64
+runner to autopkgtest against, so the .debs are not installation-
+verified.
 
 Older Debian releases (bookworm, bullseye) are not targeted: the
 package requires g++ (>= 11) and CMake (>= 3.14), which are not

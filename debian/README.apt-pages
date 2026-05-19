@@ -1,0 +1,236 @@
+Apt repository hosted on GitHub Pages
+=====================================
+
+This document describes the GitHub-Pages-hosted apt repository for
+the DuckDB packaging fork.  Two audiences are addressed:
+
+  1. END USERS who want a one-line `apt install duckdb`.
+  2. MAINTAINERS who run debian/scripts/publish-apt-pages.sh.
+
+For end users, only section 1 is relevant.
+
+------------------------------------------------------------
+1. End users — installing DuckDB via apt
+------------------------------------------------------------
+
+The repository is served at:
+
+    https://mgajda.github.io/duckdb-deb/
+
+Supported suites (use the codename of YOUR distribution):
+
+    Debian trixie  -> SUITE=trixie
+    Debian sid     -> SUITE=sid
+    Ubuntu 22.04   -> SUITE=jammy
+    Ubuntu 24.04   -> SUITE=noble
+
+Three-step install (replace SUITE with your codename above):
+
+    # 1. Trust the maintainer's archive key
+    sudo install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://mgajda.github.io/duckdb-deb/duckdb-deb-archive-key.asc \
+        | sudo gpg --dearmor -o /etc/apt/keyrings/duckdb-deb.gpg
+
+    # 2. Add the apt source
+    echo "deb [signed-by=/etc/apt/keyrings/duckdb-deb.gpg] \
+          https://mgajda.github.io/duckdb-deb SUITE main" \
+        | sudo tee /etc/apt/sources.list.d/duckdb-deb.list
+
+    # 3. Update + install
+    sudo apt-get update
+    sudo apt-get install duckdb libduckdb-dev
+
+This is a *third-party* apt repository.  It is not affiliated with
+Debian, Ubuntu, or the upstream DuckDB project.
+
+Verifying the maintainer key (optional but recommended)
+-------------------------------------------------------
+
+Before trusting the archive key, you may verify its fingerprint
+matches the maintainer's published identity:
+
+    gpg --show-keys < <(curl -fsSL \
+        https://mgajda.github.io/duckdb-deb/duckdb-deb-archive-key.asc)
+
+The displayed fingerprint should match the one listed at
+github.com/mgajda/duckdb-deb under SECURITY.md once that file
+exists.  (TODO: ship SECURITY.md.)
+
+Removing the apt source
+-----------------------
+
+    sudo rm /etc/apt/sources.list.d/duckdb-deb.list \
+            /etc/apt/keyrings/duckdb-deb.gpg
+    sudo apt-get update
+
+------------------------------------------------------------
+2. Maintainers — publishing a release to the apt repo
+------------------------------------------------------------
+
+The publish flow is laptop-local; the GPG signing key never
+leaves the maintainer's machine.  CI does NOT run this script.
+
+Prerequisites (one-time)
+------------------------
+
+1. Generate a signing key (or import an existing one):
+
+    gpg --quick-generate-key \
+        'duckdb-deb-signing <mjgajda@gmail.com>' \
+        ed25519 sign 5y
+
+   Note the fingerprint.  Save it somewhere durable (password
+   manager, paper); you will need it again when the key expires
+   in 5 years and you rotate.
+
+2. Make it gpg's default key (recommended):
+
+    echo "default-key <FPR>" >> ~/.gnupg/gpg.conf
+
+   OR plan to pass `SIGNING_KEY=<FPR>` to the publish script
+   every invocation.
+
+3. Enable GitHub Pages on the fork:
+
+    Settings -> Pages -> Source: "Deploy from a branch"
+                        Branch: "gh-pages" / "/ (root)"
+                        (gh-pages does not exist yet; the publish
+                        script creates it on first run.)
+
+4. Install the tooling:
+
+    sudo apt-get install reprepro gh
+
+   gh must be authenticated:
+
+    gh auth login
+
+Publishing a tag
+----------------
+
+After CI's release job has attached the matrix .debs to a GitHub
+Release (which requires a `git push fork v<X.Y.Z>-deb<N>`):
+
+    debian/scripts/publish-apt-pages.sh v<X.Y.Z>-deb<N>
+
+The script:
+  - downloads the release's .deb + .dsc files
+  - clones (or creates) the gh-pages branch
+  - copies the reprepro config + your public key into it
+  - includes each .deb in every published suite (over-inclusive
+    until task #26 lands; see the script comments)
+  - signs the dists/<suite>/Release files with your gpg key
+    (you will be prompted to unlock)
+  - commits and pushes gh-pages
+
+Typical runtime: ~2 minutes plus gpg-unlock delay.
+
+Verification
+------------
+
+After ~5 minutes (GH Pages cache propagation), curl one of the
+Release files to confirm:
+
+    curl -fsSL https://mgajda.github.io/duckdb-deb/dists/trixie/InRelease
+
+This should print a signed plain-text manifest.
+
+Spin up a fresh Debian container and exercise the full path:
+
+    podman run --rm -it docker.io/library/debian:trixie bash
+    # ... follow the end-user steps above ...
+
+Rolling back
+------------
+
+Each publish-apt-pages.sh run commits a new state of gh-pages.
+To roll back, force-push the previous commit:
+
+    cd ~/.cache/duckdb-apt-pages/gh-pages
+    git log --oneline | head      # find the previous good commit
+    git push fork HEAD~1:gh-pages --force
+
+Key rotation
+------------
+
+When the signing key expires (or is compromised), rotate:
+
+  1. Generate a new key with the same UID.
+  2. Re-run publish-apt-pages.sh with the new key as default.
+     The script writes the new public key into
+     duckdb-deb-archive-key.asc, replacing the old one.
+  3. Announce the rotation in the GH release notes for the next
+     tag, including the old AND new fingerprints, so existing
+     users can verify the transition.
+
+Users will see "NO_PUBKEY <FPR>" from apt-get update until they
+re-import the key via the install steps above.
+
+------------------------------------------------------------
+3. Internals (for future maintainers)
+------------------------------------------------------------
+
+Why reprepro and not aptly?
+---------------------------
+
+Both produce static apt repos.  Differences:
+
+  reprepro:
+    - In Debian/Ubuntu repos since the early 2000s
+    - Config is one file (debian/reprepro/conf/distributions)
+    - No state outside the repo dir (no daemon, no database)
+    - Stable, simple, less powerful
+
+  aptly:
+    - Newer (Go, 2014+)
+    - Models the repo as a snapshot DB; "publish snapshot" promotes
+    - Supports multi-suite atomic updates
+    - Daemon mode + REST API for managed pipelines
+
+We use reprepro because the mental model fits "publish a tag"
+better -- include this .deb, regenerate Release, sign, push.  No
+need for the snapshot/publish layer aptly adds.
+
+Other options surveyed:
+
+  Cloudsmith, Packagecloud:   commercial, third-party storage
+  Launchpad PPA:              free, but Launchpad rebuilds from
+                              source (slow turnaround), Ubuntu-only
+                              upload path, separate-account setup
+  Self-hosted (own server):   ongoing operational cost
+  Sigstore/cosign:            apt does not natively verify sigstore
+
+GH Pages won on: cost (free), simplicity (no extra service to
+manage), and maintainer control (signing key stays local).
+
+Repo layout
+-----------
+
+After the first publish, the gh-pages branch contains:
+
+    dists/
+      trixie/
+        InRelease       (Release + inline signature)
+        Release
+        Release.gpg     (detached signature)
+        main/
+          binary-amd64/Packages.{gz,xz}
+          binary-arm64/Packages.{gz,xz}
+          source/Sources.{gz,xz}
+      sid/...           (same shape)
+      jammy/...
+      noble/...
+    pool/
+      main/d/duckdb/
+        libduckdb1_<ver>_amd64.deb
+        libduckdb1_<ver>_arm64.deb
+        libduckdb-dev_<ver>_amd64.deb
+        ...
+    conf/
+      distributions     (copy of debian/reprepro/conf/distributions)
+    duckdb-deb-archive-key.asc
+    index.html
+    .gitignore          (excludes reprepro's db/, lists/, incoming/)
+
+The dists/<codename>/ trees are what apt reads; pool/ is the
+file store.  Users see whichever codename matches their distro.

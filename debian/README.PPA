@@ -1,0 +1,224 @@
+Launchpad PPA — publishing flow
+================================
+
+This document describes how to publish a tagged release to the
+Launchpad Personal Package Archive (PPA) at
+`ppa:mgajda/duckdb-deb`.
+
+Two audiences:
+  1. END USERS who want a one-line `apt install duckdb` via PPA.
+  2. MAINTAINERS who run debian/scripts/publish-ppa.sh.
+
+------------------------------------------------------------
+1. End users — using the PPA
+------------------------------------------------------------
+
+Note: as of writing, this PPA is **not yet active** — the
+publishing flow is drafted but the first successful upload has
+not happened.  Once uploads start, this section will be the
+recommended install path for Ubuntu users (alongside the
+GitHub-Pages apt repo for Debian users).
+
+When live, install with:
+
+    sudo add-apt-repository ppa:mgajda/duckdb-deb
+    sudo apt-get update
+    sudo apt-get install duckdb libduckdb-dev
+
+`add-apt-repository` fetches the PPA's signing key from
+keyserver.ubuntu.com automatically; no curl-and-dearmor dance.
+
+Supported Ubuntu series (PPA-side):
+
+    jammy   (22.04 LTS)
+    noble   (24.04 LTS)
+
+A Debian series can use the GitHub-Pages apt repo instead
+(see debian/README.apt-pages); PPAs are Ubuntu-only on the
+Launchpad side, even though the same source compiles under
+Debian and Ubuntu both.
+
+Removing the PPA:
+
+    sudo add-apt-repository --remove ppa:mgajda/duckdb-deb
+    sudo apt-get update
+
+------------------------------------------------------------
+2. Maintainers — uploading a release
+------------------------------------------------------------
+
+The PPA model differs from the GitHub-Pages apt repo in one
+crucial way: **Launchpad rebuilds the source package server-side**.
+You upload only the signed `_source.changes` + `.dsc` + orig
+tarball.  Launchpad's autobuilders then produce the .debs on
+*their* infrastructure, for *every* architecture they support.
+
+This is a substantial win:
+  - amd64, arm64, ppc64el, s390x, armhf builds for free
+  - No CI runner cost on our side
+  - Launchpad's autobuilders are the reference for Debian/Ubuntu
+    archive admission, so a green PPA build is a strong signal
+    that Debian mentors would accept the same source.
+
+The cost is turnaround time: a Launchpad build takes 20-60 min
+per (series, arch), and queues may delay the start by hours.
+
+Prerequisites (one-time)
+------------------------
+
+1. Launchpad account at https://launchpad.net/ — use your real
+   name; Launchpad's PPAs are tied to identity.  Note your
+   username; for this packaging it is `mgajda`.
+
+2. Upload your GPG public key to Launchpad:
+       https://launchpad.net/~/+editpgpkeys
+   Launchpad emails you a key-encrypted challenge; decrypt and
+   submit the response.  Until you do this, dput uploads will be
+   rejected.
+
+3. Sign the Launchpad Code of Conduct (one click):
+       https://launchpad.net/codeofconduct
+
+4. Activate the PPA:
+       https://launchpad.net/~mgajda/+activate-ppa
+   Name it `duckdb-deb` so the upload target is
+   `ppa:mgajda/duckdb-deb`.  In the description, link back to
+   github.com/mgajda/duckdb-deb so end users can find the source.
+
+5. Install tooling:
+       sudo apt-get install dput devscripts ubuntu-dev-tools gnupg
+
+Uploading a tag
+---------------
+
+After CI has produced a green build for the tag and you've
+created a GitHub Release:
+
+    debian/scripts/publish-ppa.sh v<X.Y.Z>-deb<N>
+
+The script:
+  - Checks out the tag in a temporary worktree per Ubuntu series
+  - Runs dch to set the per-series version (e.g. ~jammy0)
+  - Generates the orig tarball
+  - Runs `dpkg-buildpackage -S -sa -k<KEY>` to sign the source
+    (you'll be prompted to unlock gpg-agent)
+  - PRINTS the dput commands but does NOT execute them
+
+You then copy-paste the printed dput commands once your
+ssh-agent / gpg-agent is unlocked.  This separation is
+intentional: chaining `dput` to a possibly-locked agent inside
+the script is a recipe for retry loops and confusing errors.
+
+Typical printed output:
+
+    dput ppa:mgajda/duckdb-deb /home/m/.cache/duckdb-ppa-v1.5.2-deb1/jammy/duckdb_1.5.2~jammy0_source.changes
+    dput ppa:mgajda/duckdb-deb /home/m/.cache/duckdb-ppa-v1.5.2-deb1/noble/duckdb_1.5.2~noble0_source.changes
+
+Monitoring the build
+--------------------
+
+After dput, Launchpad emails you "Accepted" (within ~1 min) or
+"Rejected" (with reason).  Then the build queue:
+
+    https://launchpad.net/~mgajda/+archive/ubuntu/duckdb-deb/+packages
+
+Per-build status flows through:
+  Pending  ->  Currently building  ->  Successfully built  ->  Published
+                                  -> Failed to build
+
+Programmatic polling via the REST API (no auth needed for reads):
+
+    curl -sH "Accept: application/json" \
+        "https://api.launchpad.net/1.0/~mgajda/+archive/ubuntu/duckdb-deb?ws.op=getBuildSummaries"
+
+The same shape your CI watcher uses.
+
+If a build fails
+----------------
+
+Inspect the build log in the Launchpad UI.  Common failure modes:
+
+  - **Build-dep not in main**: the PPA only has access to packages
+    in main + universe.  If we ever declare a Build-Depends on a
+    package in restricted or multiverse, the build fails here.
+    Check the version of each Build-Depend with `apt-cache policy
+    <pkg>` on a clean Ubuntu install.
+
+  - **Wrong distribution field**: dput rejects an upload to a PPA
+    whose Distribution: in the .changes doesn't match a series the
+    PPA accepts.  publish-ppa.sh sets this per-series; manual
+    uploads need `dch -D <series> --force-distribution`.
+
+  - **Already uploaded**: each (source-name, version) tuple can be
+    uploaded ONCE.  To re-upload, bump the version (e.g.
+    `~jammy0` -> `~jammy1`).  This is intentional Launchpad
+    behaviour to prevent silent overwrites.
+
+  - **Missing orig tarball on re-upload**: the FIRST upload of a
+    new upstream version includes the orig tarball (we pass
+    `-sa` to dpkg-buildpackage); subsequent uploads for the same
+    upstream version DO NOT (dput uploads only the .dsc + diff +
+    .changes).  publish-ppa.sh passes -sa unconditionally; dput
+    will silently de-dup on the server side.
+
+Key rotation
+------------
+
+The gpg key Launchpad knows about is the one whose UID matches
+your account's primary email.  When you generate a new key:
+
+  1. Generate the new key with the same UID as the old one
+  2. Sign the new key with the old one
+  3. Upload the new key to Launchpad (~/+editpgpkeys)
+  4. Wait ~1 hour for Launchpad to verify the cross-signature
+  5. Re-publish with the new key as gpg's default
+  6. Mark the old key as "Deactivated" in Launchpad (this stops
+     accepting NEW uploads signed by it; previously-accepted
+     uploads stay valid)
+
+------------------------------------------------------------
+3. Relationship to other channels
+------------------------------------------------------------
+
+This packaging maintains three distribution channels, in
+publish order:
+
+  1. GitHub Pages apt repo  (debian/README.apt-pages)
+     -- ships from CI .debs, signed by maintainer's GPG key,
+        amd64+arm64 only, Debian+Ubuntu
+
+  2. Launchpad PPA          (this document)
+     -- ships from source, rebuilt by Launchpad, all archs the
+        Launchpad builders support, Ubuntu only
+
+  3. OBS apt repo           (debian/README.OBS, planned)
+     -- ships from source, rebuilt by OBS, Debian+Ubuntu+others
+
+Per the publish-flow memory, channels are exercised in this
+order: CI green -> GitHub release -> Pages apt repo -> PPA after
+field-testing -> OBS once account is active.  Each step is a
+deliberate human-gated decision.
+
+------------------------------------------------------------
+4. Comparison: PPA vs OBS
+------------------------------------------------------------
+
+Both ship from source, both rebuild server-side.  Differences:
+
+  PPA (Launchpad):
+    + Free, Canonical-hosted, well-known to Ubuntu users
+    + `add-apt-repository` UX is one command
+    - Ubuntu-only (no Debian/Mint/etc. official path)
+    - Slow queue (sometimes hours)
+    - Build infrastructure visibility ends at build-failure
+      logs; no shell access
+
+  OBS (openSUSE Build Service):
+    + Multi-distro: Debian, Ubuntu, Fedora, openSUSE, RHEL ...
+    + Faster queue
+    + Mature build-graph tooling
+    - Less well-known to Ubuntu users
+    - Adding the repo is a curl-and-dearmor song, not one command
+    - The account approval process is slow (we hit this here)
+
+We use both because they complement each other.

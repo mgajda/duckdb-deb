@@ -1,0 +1,60 @@
+# reprepro distributions config for the DuckDB packaging fork's
+# GitHub-Pages-hosted apt repository.
+#
+# One stanza per (suite, codename) pair we ship.  Each suite gets
+# its own dists/<codename>/Release that reprepro signs; users put
+# the matching codename in their /etc/apt/sources.list.d entry.
+#
+# SignWith: yes
+#   Tells reprepro to sign with gpg's default-key setting (set in
+#   ~/.gnupg/gpg.conf or via gpg --default-key on invocation).
+#   Maintainers who want to be explicit can override by exporting
+#   GNUPGHOME or passing --default-key to publish-apt-pages.sh.
+#   The signing key fingerprint is NOT stored in this repo --
+#   maintainers must export the key locally before running the
+#   publish script.  See debian/README.apt-pages "First-time setup".
+#
+# Architectures: amd64 + arm64 only.  riscv64 is built under
+# emulation (continue-on-error in CI) and is NOT promoted to the
+# apt repo until we have a real consumer with riscv64 hardware
+# asking for it -- otherwise we'd ship .debs without an effective
+# way for a maintainer to test installs.
+#
+# When adding a new suite, also extend publish-apt-pages.sh's
+# DEB_SUITES variable.
+
+Origin: mgajda/duckdb-deb
+Label: DuckDB (mgajda packaging fork)
+Suite: trixie
+Codename: trixie
+Architectures: amd64 arm64 source
+Components: main
+Description: DuckDB binaries built for Debian trixie
+SignWith: yes
+
+Origin: mgajda/duckdb-deb
+Label: DuckDB (mgajda packaging fork)
+Suite: sid
+Codename: sid
+Architectures: amd64 arm64 source
+Components: main
+Description: DuckDB binaries built for Debian sid
+SignWith: yes
+
+Origin: mgajda/duckdb-deb
+Label: DuckDB (mgajda packaging fork)
+Suite: jammy
+Codename: jammy
+Architectures: amd64 arm64 source
+Components: main
+Description: DuckDB binaries built for Ubuntu 22.04 jammy
+SignWith: yes
+
+Origin: mgajda/duckdb-deb
+Label: DuckDB (mgajda packaging fork)
+Suite: noble
+Codename: noble
+Architectures: amd64 arm64 source
+Components: main
+Description: DuckDB binaries built for Ubuntu 24.04 noble
+SignWith: yes
