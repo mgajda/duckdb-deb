@@ -157,9 +157,12 @@ jobs:
     # hardware) will be able to rebuild from our source.
     name: build-${{ matrix.target.label }}
     runs-on: ubuntu-latest
-    # GH-Actions hard-cancels at 6h; we set 5h so we get clean
+    # GH-Actions hard-cancels at 6h; we set 5h50m so we get clean
     # log capture if the emulated build can't finish in budget.
-    timeout-minutes: 300
+    # Previous run with parquet extension hit the 5h boundary; the
+    # extension list is trimmed below so this should not be needed,
+    # but the higher cap is cheap insurance.
+    timeout-minutes: 350
     continue-on-error: true
     strategy:
       fail-fast: false
@@ -220,7 +223,17 @@ jobs:
               # is plenty of headroom over our usual 8 GiB native
               # budget.  If this OOMs in practice, drop to
               # parallel=2 here (accepting roughly doubled wall time).
-              dpkg-buildpackage -us -uc -b
+              #
+              # DUCKDB_EXTENSIONS is overridden to drop "parquet" --
+              # the parquet extension is the heaviest cell in the
+              # compile graph (links lz4 + brotli + snappy + thrift
+              # + parquet-types inline) and pushed previous riscv64
+              # runs past the 5h timeout.  json + icu are kept
+              # because they exercise the largest portions of
+              # libduckdb.so and are the strongest signal that the
+              # riscv64 ABI works.
+              DUCKDB_EXTENSIONS="autocomplete;core_functions;icu;json" \
+                  dpkg-buildpackage -us -uc -b
               mkdir -p artefacts
               # *.ddeb handles Ubuntu debug-symbol naming.  See the
               # equivalent comment in the native build job.  Debian

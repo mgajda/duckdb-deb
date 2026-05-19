@@ -52,7 +52,16 @@ DUCKDB_GIT_HASH := $(shell git rev-parse --short=10 HEAD 2>/dev/null || echo 000
 # only provide benchmark schema generators of no use to most users).
 # "demo_capi" is not loaded; its sources are shipped as a C API
 # example under libduckdb-dev's documentation directory.
-DUCKDB_EXTENSIONS := autocomplete;core_functions;icu;json;parquet
+#
+# Use ?= (not :=) so callers can override the list from the
+# environment, e.g. for emulated CI legs that need to drop the
+# heaviest extensions to fit the build timeout:
+#
+#   DUCKDB_EXTENSIONS=autocomplete\;core_functions dpkg-buildpackage ...
+#
+# Note that ";" must be backslash-escaped or quoted in the shell
+# environment.
+DUCKDB_EXTENSIONS ?= autocomplete;core_functions;icu;json;parquet
 
 %:
 	dh $@ --buildsystem=cmake+ninja --builddirectory=build/deb
