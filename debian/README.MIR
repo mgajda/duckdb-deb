@@ -37,11 +37,15 @@ whether the rest of the assessment is favourable:
    declare a Depends:/Recommends: on a libduckdb1 binary.  As of
    today no such consumer exists.
 
-3. amd64-only is not sufficient.  MIR wants the package built for
-   every architecture upstream supports.  DuckDB upstream supports
-   amd64, arm64, and (with caveats) riscv64.  The packaging CI
-   currently builds amd64 only -- arm64 is on the improvement list
-   in this repo and would be required before submission.
+3. Architecture coverage.  The packaging CI builds and
+   autopkgtest-verifies amd64 and arm64 (the two architectures
+   GitHub-hosted runners support).  riscv64, ppc64el and s390x
+   are not built in CI -- there are no native runners and
+   emulation exceeded the CI job timeout.  This is acceptable
+   for MIR: Debian's archive autobuilders have native hardware
+   for those architectures and rebuild from the source package,
+   so CI proving amd64 + arm64 is sufficient evidence the source
+   is portable.
 
 Per-section assessment
 ----------------------

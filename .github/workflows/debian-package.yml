@@ -60,10 +60,14 @@ jobs:
           - { label: ubuntu-noble-arm64,   image: 'ubuntu:24.04',  runner: 'ubuntu-24.04-arm' }
           # ubuntu-26.04: add once the container image is published
           # on Docker Hub; not all LTS releases get a same-day image.
-          # riscv64: see the build-emulated job below; it cannot
-          # share this job's matrix because GH-Actions' container:
-          # directive starts the container before any step runs,
-          # which precludes a pre-step that sets up qemu-user binfmt.
+          #
+          # riscv64 is intentionally NOT built here.  It has no
+          # native GitHub-hosted runner; the only option is qemu-user
+          # emulation, which took 5+ hours and repeatedly hit the
+          # job timeout.  Debian's own autobuilders have native
+          # riscv64 hardware and will rebuild the package for that
+          # architecture from the source we publish -- CI does not
+          # need to prove riscv64 itself.  ppc64el / s390x likewise.
 
     steps:
       - name: Install build prerequisites
@@ -192,135 +196,6 @@ jobs:
             artefacts/*.buildinfo
           # Default retention is 90 days; tagged builds are also
           # promoted to a GH release below, which has no expiry.
-          retention-days: 30
-
-  build-emulated:
-    # Cross-arch build via qemu-user binfmt emulation on an amd64
-    # runner.  GH-Actions does not ship native runners for the
-    # less-common Debian/Ubuntu architectures, so this job covers
-    # them under emulation.  Expect roughly 6x the wall time of
-    # the native amd64 leg; this is acknowledged as the cost of
-    # proving the source still compiles for the arch.
-    #
-    # continue-on-error: failures here do NOT gate the release
-    # path.  The native amd64 + arm64 build matrix is what we
-    # ship; this job exists as a forward-looking signal that
-    # Debian's autobuilders (which DO have native riscv64
-    # hardware) will be able to rebuild from our source.
-    name: build-${{ matrix.target.label }}
-    runs-on: ubuntu-latest
-    # GH-Actions hard-cancels at 6h; we set 5h50m so we get clean
-    # log capture if the emulated build can't finish in budget.
-    # Previous run with parquet extension hit the 5h boundary; the
-    # extension list is trimmed below so this should not be needed,
-    # but the higher cap is cheap insurance.
-    timeout-minutes: 350
-    continue-on-error: true
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - { label: debian-sid-riscv64, image: 'debian:sid', platform: 'linux/riscv64', deb_arch: 'riscv64' }
-          # Add other non-native archs here as needed (ppc64el,
-          # s390x).  Each one slows release CI by adding a job
-          # whose timeout is ~6h, so resist the urge to extend
-          # this matrix without a concrete consumer requesting it.
-
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-
-      - name: Set up qemu-user binfmt
-        # docker/setup-qemu-action installs qemu-user-static and
-        # registers binfmt_misc handlers for all listed arches.
-        # Pinning to v3 (latest stable as of 2026-05).
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: ${{ matrix.target.platform }}
-
-      - name: Build packages under emulation
-        # We invoke docker directly (not the job-level container:)
-        # because container: starts the container before steps run,
-        # before binfmt is registered.  The --platform flag picks
-        # the matching manifest from the multi-arch Debian image.
-        #
-        # GITHUB_WORKSPACE is bind-mounted into the container at
-        # the same path, and the container runs as root (default
-        # in docker run), so dpkg-buildpackage can mark debian/rules
-        # executable and write into the workspace directly.
-        #
-        # The dpkg-buildpackage command is identical to the native
-        # job; debian/rules' parallel=4 cap still applies and keeps
-        # the emulated build inside the runner's 16 GB RAM budget.
-        run: |
-          set -eu
-          docker run --rm \
-            --platform ${{ matrix.target.platform }} \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work \
-            -e DEBIAN_FRONTEND=noninteractive \
-            ${{ matrix.target.image }} \
-            bash -c '
-              set -eu
-              apt-get update -qq
-              apt-get install -y --no-install-recommends \
-                  build-essential ca-certificates devscripts \
-                  dpkg-dev equivs fakeroot git lintian quilt
-              git config --global --add safe.directory /work
-              mk-build-deps --install --remove \
-                  --tool="apt-get -y --no-install-recommends" debian/control
-              # Use debian/rules default (parallel=4) under emulation.
-              # qemu-user adds ~200-400 MB translation-cache RSS per
-              # worker process; GH-Actions runners have 16 GB which
-              # is plenty of headroom over our usual 8 GiB native
-              # budget.  If this OOMs in practice, drop to
-              # parallel=2 here (accepting roughly doubled wall time).
-              #
-              # DUCKDB_EXTENSIONS is overridden to drop "parquet" --
-              # the parquet extension is the heaviest cell in the
-              # compile graph (links lz4 + brotli + snappy + thrift
-              # + parquet-types inline) and pushed previous riscv64
-              # runs past the 5h timeout.  json + icu are kept
-              # because they exercise the largest portions of
-              # libduckdb.so and are the strongest signal that the
-              # riscv64 ABI works.
-              DUCKDB_EXTENSIONS="autocomplete;core_functions;icu;json" \
-                  dpkg-buildpackage -us -uc -b
-              mkdir -p artefacts
-              # *.ddeb handles Ubuntu debug-symbol naming.  See the
-              # equivalent comment in the native build job.  Debian
-              # produces no .ddeb so the glob expands to nothing.
-              for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do
-                  [ -e "$f" ] && mv "$f" artefacts/
-              done
-
-      - name: Run lintian (strict)
-        # Lintian inside the same emulated container -- separate
-        # docker run keeps the build step's failure isolated from
-        # the lintian step's.
-        run: |
-          set -eu
-          docker run --rm \
-            --platform ${{ matrix.target.platform }} \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work \
-            -e DEBIAN_FRONTEND=noninteractive \
-            ${{ matrix.target.image }} \
-            bash -c '
-              apt-get update -qq
-              apt-get install -y --no-install-recommends lintian
-              debian/scripts/lintian-local.sh
-            '
-
-      - name: Upload built .deb files
-        uses: actions/upload-artifact@v4
-        with:
-          name: debs-${{ matrix.target.label }}
-          path: |
-            artefacts/*.deb
-            artefacts/*.ddeb
-            artefacts/*.changes
-            artefacts/*.buildinfo
           retention-days: 30
 
   source-package:

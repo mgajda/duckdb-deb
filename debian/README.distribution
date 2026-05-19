@@ -134,11 +134,12 @@ Supported distributions
   Ubuntu 22.04 (jammy)      amd64, arm64
   Ubuntu 24.04 (noble)      amd64, arm64
 
-riscv64 is built under qemu-user emulation in CI as a forward-
-looking signal (see debian-sid-riscv64 in the workflow) but is
-NOT yet promoted to the apt repo — there is no native riscv64
-runner to autopkgtest against, so the .debs are not installation-
-verified.
+riscv64 (and ppc64el, s390x) are not built by this packaging's
+CI: GitHub-hosted runners exist only for amd64 and arm64, and
+emulating those architectures took 5+ hours and exceeded the CI
+job timeout.  Debian's own autobuilders have native hardware for
+those architectures and rebuild the package from the source we
+publish; CI does not need to prove them.
 
 Older Debian releases (bookworm, bullseye) are not targeted: the
 package requires g++ (>= 11) and CMake (>= 3.14), which are not
