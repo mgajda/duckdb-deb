@@ -1,1 +1,2 @@
 soversion-major-only.patch
+skip-static-library.patch
