@@ -98,10 +98,27 @@ jobs:
         # parent of the source tree, which sits *outside* the
         # GitHub workspace.  upload-artifact@v4 refuses paths
         # outside the workspace, so move them in before upload.
+        #
+        # *.ddeb is included because Ubuntu's debhelper renames
+        # debug-symbol packages from .deb to .ddeb (a convention
+        # used by Ubuntu's archive to keep debug packages out of
+        # main; Debian does not do this).  The .changes file
+        # references the .ddeb filename verbatim, so lintian's
+        # walk over the .changes will error with "does not exist,
+        # exiting" if the .ddeb is left in ../.  Including *.ddeb
+        # in the glob keeps the staging step uniform across
+        # Debian (no .ddeb produced -> glob expands to nothing
+        # via nullglob below) and Ubuntu.
         run: |
           set -eu
+          shopt -s nullglob 2>/dev/null || true
           mkdir -p artefacts
-          mv ../*.deb ../*.changes ../*.buildinfo artefacts/
+          # `mv` of a non-matching glob would fail under set -eu
+          # without nullglob; the conditional invocation below
+          # works on both bash (with nullglob) and POSIX sh.
+          for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do
+              [ -e "$f" ] && mv "$f" artefacts/
+          done
 
       - name: Run lintian (strict)
         # Uses debian/scripts/lintian-local.sh so the CI invocation
@@ -118,6 +135,7 @@ jobs:
           name: debs-${{ matrix.target.label }}
           path: |
             artefacts/*.deb
+            artefacts/*.ddeb
             artefacts/*.changes
             artefacts/*.buildinfo
           # Default retention is 90 days; tagged builds are also
@@ -204,8 +222,12 @@ jobs:
               # parallel=2 here (accepting roughly doubled wall time).
               dpkg-buildpackage -us -uc -b
               mkdir -p artefacts
-              mv ../*.deb ../*.changes ../*.buildinfo artefacts/
-            '
+              # *.ddeb handles Ubuntu debug-symbol naming.  See the
+              # equivalent comment in the native build job.  Debian
+              # produces no .ddeb so the glob expands to nothing.
+              for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do
+                  [ -e "$f" ] && mv "$f" artefacts/
+              done
 
       - name: Run lintian (strict)
         # Lintian inside the same emulated container -- separate
@@ -231,6 +253,7 @@ jobs:
           name: debs-${{ matrix.target.label }}
           path: |
             artefacts/*.deb
+            artefacts/*.ddeb
             artefacts/*.changes
             artefacts/*.buildinfo
           retention-days: 30
@@ -374,11 +397,16 @@ jobs:
         # skipped (skippable restriction); 4 = a real failure.
         run: |
           set -eu
-          autopkgtest \
-              artefacts/*.deb \
-              artefacts/*.changes \
-              --output-dir=autopkgtest-out \
-              -- null
+          # *.ddeb handles Ubuntu's debug-symbol filename convention
+          # (Debian-built .changes won't reference .ddeb so the glob
+          # expanding to literal '../*.ddeb' on Debian is fine --
+          # autopkgtest ignores nonexistent positional arguments).
+          # Use a for-loop to silently skip the empty glob case.
+          set -- artefacts/*.changes
+          for f in artefacts/*.deb artefacts/*.ddeb; do
+              [ -e "$f" ] && set -- "$@" "$f"
+          done
+          autopkgtest "$@" --output-dir=autopkgtest-out -- null
 
       - name: Upload autopkgtest logs
         if: always()
