@@ -6,42 +6,180 @@ Source: https://github.com/duckdb/duckdb
 Files: *
 Copyright: 2018-2026 Stichting DuckDB Foundation
 License: Expat
-Comment:
- The core DuckDB code base is distributed under the MIT (Expat)
- license, the full text of which is reproduced below and is also
- available in the upstream LICENSE file installed into
- /usr/share/doc/<package>/ by each binary package.
-
-Files: third_party/*
-Copyright: see the LICENSE file inside each respective subdirectory
-License: see-third-party-LICENSE-files
-Comment:
- The third_party/ tree contains vendored upstream dependencies.  Each
- component retains its own copyright and license terms as recorded in
- the LICENSE file inside its respective subdirectory, which is shipped
- unchanged in the source package and reproduced verbatim in
- /usr/share/doc/libduckdb-dev/third_party-licenses/.
- .
- Components that do not currently ship an in-tree LICENSE file in
- this snapshot are: catch, imdb, thrift.  Their license terms are
- those of the respective upstream projects (Catch2 / Boost Software
- License 1.0; Apache Thrift / Apache-2.0; IMDb-derived benchmark
- schema / Expat-equivalent permissive terms per the DuckDB project)
- but the canonical text is not vendored in this tree.  Downstream
- redistributors who require a complete, in-tree LICENSE record for
- these components should verify with upstream before further
- redistribution.
 
 Files: debian/*
 Copyright: 2026 Michal J. Gajda <mjgajda@gmail.com>
 License: Expat
 
-License: see-third-party-LICENSE-files
- See the LICENSE file inside each subdirectory of third_party/ in
- the source for the license and copyright terms applicable to that
- component.  The same files are installed into
- /usr/share/doc/libduckdb-dev/third_party-licenses/ by the
- libduckdb-dev package.
+# -------------------------------------------------------------------
+# third_party/ vendored upstream libraries
+#
+# Each subdirectory of third_party/ is a verbatim copy of an upstream
+# project, retaining its own copyright and license.  The stanzas
+# below enumerate every vendored component compiled into the shipped
+# binaries.  Components that are not compiled into the package
+# (header-only files used only at compile time, benchmark-only code,
+# unenabled extensions) are still licensed but not shipped as code
+# in the binary packages -- they are present in the source package.
+# -------------------------------------------------------------------
+
+Files: third_party/brotli/*
+Copyright: 2009, 2010, 2013-2016 The Brotli Authors
+License: Expat
+
+Files: third_party/catch/*
+Copyright: 2010-2021 Two Blue Cubes Ltd. and contributors
+License: BSL-1.0
+Comment:
+ Catch2 v2.13.7 single-include header.  Source distributes under the
+ Boost Software License 1.0 per the per-file banner in
+ third_party/catch/catch.hpp; no separate LICENSE file is vendored
+ because the upstream single-header release is the LICENSE+code in
+ one file.
+
+Files: third_party/concurrentqueue/*
+Copyright: 2013-2016 Cameron Desrochers
+ 2015 Jeff Preshing (lightweightsemaphore.h)
+License: BSD-2-clause or BSL-1.0
+Comment:
+ lightweightsemaphore.h carries an additional zlib license per its
+ own per-file banner.
+
+Files: third_party/fast_float/*
+Copyright: 2020-2024 Daniel Lemire and the fast_float contributors
+License: Apache-2.0 or BSL-1.0 or Expat
+Comment:
+ fast_float is triple-licensed at the user's option.
+
+Files: third_party/fastpforlib/*
+Copyright: 2012-2016 Daniel Lemire and contributors
+License: Apache-2.0
+
+Files: third_party/fmt/*
+Copyright: 2012-present Victor Zverovich and {fmt} contributors
+License: Expat
+
+Files: third_party/fsst/*
+Copyright: 2018-2020 CWI, TU Munich, FSU Jena
+License: Expat
+
+Files: third_party/httplib/*
+Copyright: 2017-present yhirose
+License: Expat
+Comment:
+ Used by the (unenabled) httpfs extension.  Not compiled into the
+ shipped libduckdb.so by debian/rules' DUCKDB_EXTENSIONS list, but
+ present in the source package, so attribution is recorded.
+
+Files: third_party/hyperloglog/*
+Copyright: 2012 Art.sy, Inc.
+License: Expat
+
+Files: third_party/imdb/*
+Copyright: 2018-2026 Stichting DuckDB Foundation
+License: Expat
+Comment:
+ DuckDB-authored benchmark loader for the IMDb JOB benchmark dataset.
+ The dataset itself (which is NOT vendored in this source tree) has
+ its own licensing from the IMDb project.  Only the loader code is
+ in third_party/imdb/; it is used solely by benchmark_runner and is
+ NOT compiled into the shipped libduckdb.so or duckdb CLI.
+
+Files: third_party/jaro_winkler/*
+Copyright: 2022 Max Bachmann
+License: Expat
+
+Files: third_party/lz4/*
+Copyright: 2011-2020 Yann Collet
+License: BSD-2-clause
+
+Files: third_party/mbedtls/*
+Copyright: 2006-2024 The Mbed TLS Contributors
+License: Apache-2.0
+Comment:
+ Mbed TLS upstream offers a GPL-2.0+ alternative.  DuckDB's vendoring
+ uses the Apache-2.0 grant only.
+
+Files: third_party/miniz/*
+Copyright: 2013-2014 RAD Game Tools and Valve Software
+ 2010-2014 Rich Geldreich and Tenacious Software LLC
+License: Expat
+
+Files: third_party/parquet/*
+Copyright: Autogenerated by Thrift Compiler from Apache Parquet Format
+ 2010-present Apache Software Foundation
+License: Apache-2.0
+Comment:
+ Thrift-generated C++ bindings for the Apache Parquet file format.
+ The .thrift schema source is parquet.thrift from
+ https://github.com/apache/parquet-format ; the generated .cpp/.h
+ are committed under DuckDB's third_party/parquet/.
+
+Files: third_party/pcg/*
+Copyright: 2014-2017 Melissa O'Neill and PCG Project contributors
+License: Expat or Apache-2.0
+Comment:
+ The PCG random-number generator library is dual-licensed at the
+ user's option.
+
+Files: third_party/pdqsort/*
+Copyright: 2021 Orson Peters <orsonpeters@gmail.com>
+License: zlib
+
+Files: third_party/re2/*
+Copyright: 2009 The RE2 Authors
+License: BSD-3-clause
+
+Files: third_party/ska_sort/*
+Copyright: 2016 Malte Skarupke
+License: BSL-1.0
+
+Files: third_party/skiplist/*
+Copyright: 2017-2023 Paul Ross
+License: Expat
+
+Files: third_party/snappy/*
+Copyright: 2011 Google Inc.
+License: BSD-3-clause
+
+Files: third_party/snowball/*
+Copyright: 2001 Dr Martin Porter
+ 2004-2005 Richard Boulton
+ 2013 Yoshiki Shibukawa
+ 2006-2019 Olly Betts
+License: BSD-3-clause
+
+Files: third_party/tdigest/*
+Copyright: 2018 Derrick R. Burns
+License: Apache-2.0
+
+Files: third_party/thrift/*
+Copyright: 2006-present Apache Software Foundation
+License: Apache-2.0
+
+Files: third_party/utf8proc/*
+Copyright: 2014-2019 Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors
+ 2009 Public Software Group e.V., Berlin, Germany
+License: Expat
+
+Files: third_party/vergesort/*
+Copyright: 2015-2020 Morwenn <morwenn29@hotmail.fr>
+License: Expat
+
+Files: third_party/yyjson/*
+Copyright: 2020-present YaoYuan <ibireme@gmail.com>
+License: Expat
+
+Files: third_party/zstd/*
+Copyright: 2016-present Meta Platforms, Inc. and affiliates
+License: BSD-3-clause
+Comment:
+ Upstream offers a GPL-2.0 alternative; DuckDB vendors the
+ BSD-3-clause text only.
+
+# -------------------------------------------------------------------
+# License texts
+# -------------------------------------------------------------------
 
 License: Expat
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -61,3 +199,108 @@ License: Expat
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ use this file except in compliance with the License.  You may obtain a copy
+ of the License at
+ .
+     http://www.apache.org/licenses/LICENSE-2.0
+ .
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ License for the specific language governing permissions and limitations
+ under the License.
+ .
+ On Debian systems the full text is in
+ /usr/share/common-licenses/Apache-2.0 .
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+   1. Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+   1. Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+   3. Neither the name of the copyright holder nor the names of its
+      contributors may be used to endorse or promote products derived from
+      this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.
+
+License: BSL-1.0
+ Boost Software License - Version 1.0 - August 17th, 2003
+ .
+ Permission is hereby granted, free of charge, to any person or organization
+ obtaining a copy of the software and accompanying documentation covered by
+ this license (the "Software") to use, reproduce, display, distribute,
+ execute, and transmit the Software, and to prepare derivative works of the
+ Software, and to permit third-parties to whom the Software is furnished to
+ do so, all subject to the following:
+ .
+ The copyright notices in the Software and this entire statement, including
+ the above license grant, this restriction and the following disclaimer,
+ must be included in all copies of the Software, in whole or in part, and
+ all derivative works of the Software, unless such copies or derivative
+ works are solely in the form of machine-executable object code generated
+ by a source language processor.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT.  IN NO EVENT
+ SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ OTHER DEALINGS IN THE SOFTWARE.
+
+License: zlib
+ This software is provided 'as-is', without any express or implied warranty.
+ In no event will the authors be held liable for any damages arising from
+ the use of this software.
+ .
+ Permission is granted to anyone to use this software for any purpose,
+ including commercial applications, and to alter it and redistribute it
+ freely, subject to the following restrictions:
+ .
+   1. The origin of this software must not be misrepresented; you must not
+      claim that you wrote the original software.  If you use this software
+      in a product, an acknowledgment in the product documentation would be
+      appreciated but is not required.
+   2. Altered source versions must be plainly marked as such, and must not
+      be misrepresented as being the original software.
+   3. This notice may not be removed or altered from any source distribution.
