@@ -37,15 +37,16 @@ jobs:
           # Native amd64 -- the original four legs.  runner: ubuntu-latest
           # currently resolves to ubuntu-24.04 (free, 4 CPUs).
           #
-          # ccache: true on debian-trixie-amd64 and ubuntu-noble-amd64
-          # only.  GitHub's per-repo cache budget is 10 GB; a fat
-          # ccache for DuckDB is ~3-4 GB, so we can only afford two.
-          # We pick the newest Debian stable + newest Ubuntu LTS as
-          # the two cells worth fast warm builds; the other six run
-          # cold.  ccache produces byte-identical objects, so cached
-          # cells still build exactly what the cold cells build.
+          # ccache: true on three amd64 cells -- debian-trixie
+          # (newest Debian stable), debian-sid (Debian unstable),
+          # and ubuntu-noble (newest Ubuntu LTS).  GitHub's per-repo
+          # cache budget is 10 GB; with CCACHE_MAXSIZE=3.3G that is
+          # 3 x 3.3 = 9.9 GB, right at the budget.  The other five
+          # cells build cold.  ccache produces byte-identical
+          # objects, so cached cells still build exactly what the
+          # cold cells build.
           - { label: debian-trixie-amd64,  image: 'debian:trixie', runner: 'ubuntu-latest', ccache: true }
-          - { label: debian-sid-amd64,     image: 'debian:sid',    runner: 'ubuntu-latest' }
+          - { label: debian-sid-amd64,     image: 'debian:sid',    runner: 'ubuntu-latest', ccache: true }
           - { label: ubuntu-jammy-amd64,   image: 'ubuntu:22.04',  runner: 'ubuntu-latest' }
           - { label: ubuntu-noble-amd64,   image: 'ubuntu:24.04',  runner: 'ubuntu-latest', ccache: true }
           # Native arm64 -- runner labels ubuntu-{22,24}.04-arm
@@ -124,14 +125,16 @@ jobs:
 
       - name: Build source + binary packages
         # DEB_DUCKDB_CCACHE / CCACHE_* are only set on cells where
-        # matrix.target.ccache is true; on the other six cells the
+        # matrix.target.ccache is true; on the other five cells the
         # env vars are empty and debian/rules builds cold.
         env:
           DEB_DUCKDB_CCACHE: ${{ matrix.target.ccache && '1' || '' }}
           CCACHE_DIR: ${{ matrix.target.ccache && format('{0}/.ccache', github.workspace) || '' }}
-          # 4 GB ceiling: two cached cells x 4 GB = 8 GB, within the
-          # 10 GB per-repo cache budget with headroom.
-          CCACHE_MAXSIZE: 4G
+          # 3.3 GB ceiling: three cached cells x 3.3 GB = 9.9 GB,
+          # right at the 10 GB per-repo cache budget.  actions/cache
+          # evicts least-recently-used entries if the repo total is
+          # exceeded, so a brief overshoot self-corrects.
+          CCACHE_MAXSIZE: 3.3G
         run: |
           set -eu
           # -us -uc: don't sign source or changes.  CI has no key by
