@@ -379,3 +379,8 @@ generated_extension_loader_package_build.cpp
 # tidy completely).  Ignore wholesale -- the canonical state is the
 # patch series in debian/patches/.
 /.pc/
+
+# ccache directory used by the CI build job (CCACHE_DIR is set to
+# $GITHUB_WORKSPACE/.ccache so the cache survives via actions/cache
+# and is visible inside the build container).  Never committed.
+/.ccache/

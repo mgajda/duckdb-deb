@@ -66,6 +66,22 @@ DUCKDB_EXTENSIONS ?= autocomplete;core_functions;icu;json;parquet
 %:
 	dh $@ --buildsystem=cmake+ninja --builddirectory=build/deb
 
+# Optional ccache compiler launcher.  OFF by default so the
+# maintainer's laptop build and Debian's autobuilders produce a
+# reproducible result from a cold compiler -- ccache must never be
+# on the critical path of a release build.  CI opts in by exporting
+# DEB_DUCKDB_CCACHE=1; see .github/workflows/debian-package.yml.
+# ccache is a transparent compile cache: identical objects, just
+# retrieved instead of recompiled, so the resulting binaries are
+# byte-identical whether or not it is enabled.
+ifeq ($(DEB_DUCKDB_CCACHE),1)
+  CCACHE_CMAKE_ARGS := \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+else
+  CCACHE_CMAKE_ARGS :=
+endif
+
 override_dh_auto_configure:
 	dh_auto_configure -- \
 	    -DCMAKE_BUILD_TYPE=Release \
@@ -75,6 +91,7 @@ override_dh_auto_configure:
 	    -DBUILD_EXTENSIONS="$(DUCKDB_EXTENSIONS)" \
 	    -DSET_DUCKDB_LIBRARY_VERSION=ON \
 	    -DDISABLE_UNITY=ON \
+	    $(CCACHE_CMAKE_ARGS) \
 	    -DOVERRIDE_GIT_DESCRIBE=v$(DUCKDB_XYZ)-0-g$(DUCKDB_GIT_HASH)
 
 # BUILD_STATIC_LIBRARY=OFF (via debian/patches/skip-static-library.patch)

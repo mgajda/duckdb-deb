@@ -36,10 +36,18 @@ jobs:
         target:
           # Native amd64 -- the original four legs.  runner: ubuntu-latest
           # currently resolves to ubuntu-24.04 (free, 4 CPUs).
-          - { label: debian-trixie-amd64,  image: 'debian:trixie', runner: 'ubuntu-latest' }
+          #
+          # ccache: true on debian-trixie-amd64 and ubuntu-noble-amd64
+          # only.  GitHub's per-repo cache budget is 10 GB; a fat
+          # ccache for DuckDB is ~3-4 GB, so we can only afford two.
+          # We pick the newest Debian stable + newest Ubuntu LTS as
+          # the two cells worth fast warm builds; the other six run
+          # cold.  ccache produces byte-identical objects, so cached
+          # cells still build exactly what the cold cells build.
+          - { label: debian-trixie-amd64,  image: 'debian:trixie', runner: 'ubuntu-latest', ccache: true }
           - { label: debian-sid-amd64,     image: 'debian:sid',    runner: 'ubuntu-latest' }
           - { label: ubuntu-jammy-amd64,   image: 'ubuntu:22.04',  runner: 'ubuntu-latest' }
-          - { label: ubuntu-noble-amd64,   image: 'ubuntu:24.04',  runner: 'ubuntu-latest' }
+          - { label: ubuntu-noble-amd64,   image: 'ubuntu:24.04',  runner: 'ubuntu-latest', ccache: true }
           # Native arm64 -- runner labels ubuntu-{22,24}.04-arm
           # were promoted out of preview in 2025 and are free for
           # public repos with the same 4-CPU spec as amd64.  The
@@ -61,12 +69,15 @@ jobs:
       - name: Install build prerequisites
         # apt-get is run before the checkout so `git` is available
         # for actions/checkout and dpkg-parsechangelog inside debian/rules.
+        # ccache is installed on every cell (it is a tiny package);
+        # it is only *used* on cells with matrix.target.ccache, gated
+        # via the DEB_DUCKDB_CCACHE env var on the build step below.
         run: |
           set -eu
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends \
-              build-essential ca-certificates devscripts \
+              build-essential ca-certificates ccache devscripts \
               dpkg-dev equivs fakeroot git lintian quilt
 
       - uses: actions/checkout@v4
@@ -78,6 +89,29 @@ jobs:
         # root user trips git's "dubious ownership" check.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Restore ccache
+        # Only the cells with matrix.target.ccache use the compile
+        # cache (GitHub's 10 GB per-repo cache budget only stretches
+        # to two ~3-4 GB caches -- see the matrix comment).
+        #
+        # CCACHE_DIR is placed inside GITHUB_WORKSPACE so the cache,
+        # restored by this host-side action, is visible to the
+        # compiler running inside the container (the workspace is
+        # bind-mounted; arbitrary host paths are not).
+        #
+        # key embeds the matrix label so trixie and noble keep
+        # separate caches (their toolchains differ; objects are not
+        # interchangeable).  github.sha makes each run write a fresh
+        # entry; restore-keys falls back to the most recent cache
+        # for the same cell so warm builds survive across commits.
+        if: ${{ matrix.target.ccache }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-${{ matrix.target.label }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.target.label }}-
+
       - name: Install package Build-Depends
         run: |
           set -eu
@@ -85,13 +119,31 @@ jobs:
           mk-build-deps --install --remove --tool='apt-get -y --no-install-recommends' debian/control
 
       - name: Build source + binary packages
+        # DEB_DUCKDB_CCACHE / CCACHE_* are only set on cells where
+        # matrix.target.ccache is true; on the other six cells the
+        # env vars are empty and debian/rules builds cold.
+        env:
+          DEB_DUCKDB_CCACHE: ${{ matrix.target.ccache && '1' || '' }}
+          CCACHE_DIR: ${{ matrix.target.ccache && format('{0}/.ccache', github.workspace) || '' }}
+          # 4 GB ceiling: two cached cells x 4 GB = 8 GB, within the
+          # 10 GB per-repo cache budget with headroom.
+          CCACHE_MAXSIZE: 4G
         run: |
           set -eu
           # -us -uc: don't sign source or changes.  CI has no key by
           # design; signing is part of publishing, not building.
           # -b: binary-only on this leg; the source package is built
           # in the dedicated job below for upload as a release asset.
+          if [ -n "${DEB_DUCKDB_CCACHE:-}" ]; then
+              echo "=== ccache enabled; pre-build stats ==="
+              ccache --zero-stats >/dev/null
+              ccache --show-stats --verbose | head -20 || true
+          fi
           dpkg-buildpackage -us -uc -b
+          if [ -n "${DEB_DUCKDB_CCACHE:-}" ]; then
+              echo "=== ccache post-build stats ==="
+              ccache --show-stats --verbose | head -20 || true
+          fi
 
       - name: Stage build outputs into workspace
         # dpkg-buildpackage writes .deb/.changes/.buildinfo to the
