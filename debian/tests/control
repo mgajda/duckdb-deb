@@ -47,6 +47,13 @@ Depends: libduckdb-dev, build-essential
 #                      resolver failure is an infrastructure
 #                      problem, not a packaging defect; mark flaky
 #                      so such failures do not block.
+#   skippable       -- the test exits 77 when the distro's GHC is
+#                      older than 9.6 (duckdb-ffi's minimum); Ubuntu
+#                      noble ships GHC 9.4.  autopkgtest only honours
+#                      exit 77 as a skip when the test is declared
+#                      skippable -- without it, 77 counts as a
+#                      failure.  An old system compiler is not a
+#                      defect of libduckdb-dev, so a skip is correct.
 Tests: haskell-link
 Depends: libduckdb-dev, build-essential, ghc, cabal-install
-Restrictions: needs-internet, flaky
+Restrictions: needs-internet, flaky, skippable

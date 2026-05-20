@@ -389,8 +389,19 @@ jobs:
         # needed (and would not work without privileged mode).
         # `--shell-fail` opens a debug shell if running locally;
         # in CI it has no effect because there is no terminal.
-        # Exit code 0 = all tests passed; 2 = some tests were
-        # skipped (skippable restriction); 4 = a real failure.
+        #
+        # autopkgtest exit codes are a bitmask, not a simple
+        # pass/fail (see autopkgtest(1) "Exit status"):
+        #   0  all tests passed
+        #   2  at least one test was skipped, none failed
+        #   8  a test with the `flaky` restriction failed
+        #   4  a (non-flaky) test failed                <- real failure
+        #   others (12/14/16/20) infrastructure/usage errors
+        # 2 and 8 are non-gating *by design*: the haskell-link test
+        # is `skippable` (exits 77 on Ubuntu's too-old GHC -> 2) and
+        # `flaky` (a Hackage outage -> 8).  Treating either as a job
+        # failure would defeat both restrictions, so the wrapper
+        # below passes on 0/2/8 and fails on anything else.
         run: |
           set -eu
           # Pass the .changes plus the runtime .deb files as the
@@ -409,7 +420,16 @@ jobs:
           for f in artefacts/*.deb; do
               [ -e "$f" ] && set -- "$@" "$f"
           done
-          autopkgtest "$@" --output-dir=autopkgtest-out -- null
+          # `|| rc=$?` keeps set -e from aborting on the non-zero
+          # exit; we then accept the non-gating codes explicitly.
+          rc=0
+          autopkgtest "$@" --output-dir=autopkgtest-out -- null || rc=$?
+          case "$rc" in
+              0) echo "autopkgtest: all tests passed" ;;
+              2) echo "autopkgtest: some tests skipped (rc=2), none failed -- OK" ;;
+              8) echo "autopkgtest: a flaky test failed (rc=8) -- not gating" ;;
+              *) echo "autopkgtest: failure (rc=$rc)" >&2; exit "$rc" ;;
+          esac
 
       - name: Upload autopkgtest logs
         if: always()

@@ -104,8 +104,21 @@ build:
   <<: *distro-matrix
   stage: build
   image: $IMAGE
+  # GitLab's default job timeout is 1 hour.  The DuckDB build with
+  # DISABLE_UNITY=ON is CPU-bound and the medium SaaS runner has only
+  # 2 vCPUs, with no ccache (this fallback builds cold) -- the build
+  # overran 1h and was killed at ninja step ~2270/2304.  3h leaves a
+  # comfortable margin; raise it further only if upstream's build
+  # cost grows.
+  timeout: 3h
   variables:
     DEBIAN_FRONTEND: noninteractive
+    # Match parallelism to the medium runner's 2 vCPUs.  debian/rules
+    # only injects its own parallel=4 default when DEB_BUILD_OPTIONS
+    # carries no parallel= token, so setting it here cleanly
+    # overrides: parallel=4 on 2 cores just thrashes the scheduler
+    # and inflates peak RSS for no wall-clock gain.
+    DEB_BUILD_OPTIONS: "parallel=2"
   before_script:
     # apt-get before anything else so git is available for
     # dpkg-parsechangelog inside debian/rules.  lintian + quilt are
@@ -126,10 +139,11 @@ build:
     # dpkg-buildpackage writes artefacts to the parent of the source
     # tree; move them in so GitLab can collect them.  *.ddeb covers
     # Ubuntu's debug-package filename convention (Debian produces
-    # none, so the glob harmlessly expands to nothing there).
+    # none).  The `[ -e "$f" ]` guard makes a non-matching glob a
+    # no-op without relying on bash's nullglob -- GitLab may run the
+    # job script under dash.
     - mkdir -p artefacts
-    - shopt -s nullglob
-    - for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do mv "$f" artefacts/; done
+    - for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do [ -e "$f" ] && mv "$f" artefacts/; done
     # Strict lintian, identical invocation to a maintainer's local
     # run and to the GitHub workflow.  Must run from a directory
     # where it can see the .changes; the script handles that.
