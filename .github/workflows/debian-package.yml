@@ -96,7 +96,16 @@ jobs:
         # inside the container reclaims real space on the same volume
         # the build writes to.  The mount point itself is left intact
         # so nothing downstream trips over a missing directory.
-        run: rm -rf /__t/* 2>/dev/null || true
+        #
+        # df is printed before and after so the log records exactly
+        # how much the cleanup reclaimed -- if a future build exhausts
+        # disk anyway, the starting headroom is right here in the log.
+        run: |
+          echo "=== disk before cleanup ==="
+          df -h /__w /__t 2>/dev/null || df -h
+          rm -rf /__t/* 2>/dev/null || true
+          echo "=== disk after cleanup ==="
+          df -h /__w /__t 2>/dev/null || df -h
 
       - name: Install build prerequisites
         # apt-get is run before the checkout so `git` is available
@@ -178,6 +187,20 @@ jobs:
               echo "=== ccache post-build stats ==="
               ccache --show-stats --verbose | head -20 || true
           fi
+
+      - name: Report disk usage after build
+        # if: always() so a build that failed *because* it ran out of
+        # disk still records the final state here -- the single most
+        # useful datum when diagnosing a "No space left on device".
+        # du on the build tree shows where the space went (the cmake
+        # build dir, the .ccache dir, the staged artefacts).
+        if: always()
+        run: |
+          echo "=== disk after build ==="
+          df -h /__w /__t 2>/dev/null || df -h
+          echo "=== build-tree usage (top consumers) ==="
+          du -sh build/deb .ccache artefacts ../*.deb ../*.ddeb 2>/dev/null \
+              | sort -rh | head -15 || true
 
       - name: Stage build outputs into workspace
         # dpkg-buildpackage writes .deb/.changes/.buildinfo to the
@@ -370,13 +393,20 @@ jobs:
         # skipped (skippable restriction); 4 = a real failure.
         run: |
           set -eu
-          # *.ddeb handles Ubuntu's debug-symbol filename convention
-          # (Debian-built .changes won't reference .ddeb so the glob
-          # expanding to literal '../*.ddeb' on Debian is fine --
-          # autopkgtest ignores nonexistent positional arguments).
-          # Use a for-loop to silently skip the empty glob case.
+          # Pass the .changes plus the runtime .deb files as the
+          # packages to install and test.  Deliberately NOT the
+          # *.ddeb debug-symbol packages: on Ubuntu debhelper emits
+          # duckdb-dbgsym_*.ddeb, and autopkgtest rejects a .ddeb
+          # given as a positional package with
+          #   "<file> is not a valid test package"  (exit 20).
+          # The debug-symbol package carries only detached DWARF and
+          # is irrelevant to debian/tests/ -- the tests exercise the
+          # runtime packages (libduckdb1, libduckdb-dev, duckdb).
+          # Debian produces no .ddeb, so excluding it is uniform
+          # across both distros.  The for-loop silently skips the
+          # empty-glob case under set -eu.
           set -- artefacts/*.changes
-          for f in artefacts/*.deb artefacts/*.ddeb; do
+          for f in artefacts/*.deb; do
               [ -e "$f" ] && set -- "$@" "$f"
           done
           autopkgtest "$@" --output-dir=autopkgtest-out -- null
