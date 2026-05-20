@@ -1,0 +1,141 @@
+# GitLab CI mirror of .github/workflows/debian-package.yml
+# ----------------------------------------------------------------------
+# This is a FALLBACK pipeline.  The canonical packaging CI is the
+# GitHub Actions `debian-package` workflow; this file exists so the
+# same source + binary package build can run on GitLab if GitHub's
+# hosted runners prove inadequate -- specifically the ~14 GB root-fs
+# budget on `ubuntu-latest` that the DuckDB build (DISABLE_UNITY=ON,
+# thousands of debuggable .o files, libduckdb_static.a, five in-tree
+# extensions) has exhausted in the past.
+#
+# Why GitLab helps here: GitLab.com SaaS runners are tiered by size,
+# and the *medium* tier (`saas-linux-medium-amd64`) ships ~50 GB of
+# job disk -- comfortably more than GitHub's standard runner.  Unlike
+# the GitHub workflow, a GitLab job IS the container (image: below),
+# so there is no host/container split and no /opt/hostedtoolcache to
+# clean: the disk is simply available.
+#
+# Parity with the GitHub workflow:
+#   * same target matrix (Debian trixie/sid, Ubuntu noble) -- see the
+#     note on arm64 and ubuntu:devel below;
+#   * same build invocation (dpkg-buildpackage -us -uc -b);
+#   * same strict lintian gate via debian/scripts/lintian-local.sh;
+#   * same source-package job for a single downloadable .dsc + orig.
+#
+# Differences from the GitHub workflow, and why:
+#   * No ccache.  The GitHub workflow caches compile objects across
+#     runs to fit its 10 GB per-repo cache budget; on GitLab the
+#     medium runner's disk headroom makes a cold build acceptable and
+#     keeps this fallback file simple.  Add a `cache:` block keyed on
+#     the job name if warm builds are wanted later.
+#   * arm64 and ubuntu:devel cells are omitted.  GitLab.com arm64 SaaS
+#     runners are a separate, minute-limited tier; the GitHub workflow
+#     already covers arm64 natively and ubuntu:devel as a non-gating
+#     forward check.  This fallback's job is to prove the amd64 build
+#     completes with adequate disk -- add arm64 cells with
+#     `tags: [saas-linux-medium-arm64]` if cross-arch cover is needed.
+
+stages:
+  - source
+  - build
+
+# Anchor: the medium SaaS runner (~50 GB job disk) is the whole point
+# of this fallback.  Every job opts in via `tags`.
+.medium-runner: &medium-runner
+  tags:
+    - saas-linux-medium-amd64
+
+# Anchor: the build matrix.  GitLab expands `parallel:matrix` into one
+# job per combination; IMAGE is consumed by `image:` on each job.
+.distro-matrix: &distro-matrix
+  parallel:
+    matrix:
+      - IMAGE: debian:trixie
+      - IMAGE: debian:sid
+      - IMAGE: ubuntu:24.04
+
+# --------------------------------------------------------------------
+# source-package: build the .dsc + orig tarball once, on the newest
+# Debian, for release upload.  Mirrors the GitHub `source-package`
+# job.  OBS re-derives these from git, so this exists only to give a
+# single download of "the source this commit corresponds to."
+# --------------------------------------------------------------------
+source-package:
+  <<: *medium-runner
+  stage: source
+  image: debian:sid
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends
+        ca-certificates devscripts dpkg-dev fakeroot git equivs
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  script:
+    # Install Build-Depends-Indep so dpkg-buildpackage -S is happy.
+    - mk-build-deps --install --remove
+        --tool='apt-get -y --no-install-recommends' debian/control
+    # 3.0 (quilt) needs <pkg>_<upstream-version>.orig.tar.* in the
+    # parent dir.  For snapshot builds there is no upstream release
+    # tarball, so synthesise one from HEAD, excluding the packaging
+    # tree -- identical logic to the GitHub workflow.
+    - upstream_version=$(dpkg-parsechangelog -S Version | sed 's/-[^-]*$//')
+    - orig_name="duckdb_${upstream_version}.orig.tar.xz"
+    - git archive --format=tar HEAD | tar --delete debian | xz -T0 > "../$orig_name"
+    - ls -lh "../$orig_name"
+    # -d skips the build-dep check (mk-build-deps already ran); -S is
+    # source-only.
+    - dpkg-buildpackage -us -uc -S -d
+    - mkdir -p artefacts
+    - mv ../*.dsc ../*.tar.* ../*_source.changes artefacts/
+  artifacts:
+    name: source-package
+    paths:
+      - artefacts/
+    expire_in: 30 days
+
+# --------------------------------------------------------------------
+# build: per-distro source + binary package build, then strict
+# lintian.  Mirrors the GitHub `build` job.  One job per IMAGE via
+# parallel:matrix.
+# --------------------------------------------------------------------
+build:
+  <<: *medium-runner
+  <<: *distro-matrix
+  stage: build
+  image: $IMAGE
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    # apt-get before anything else so git is available for
+    # dpkg-parsechangelog inside debian/rules.  lintian + quilt are
+    # needed by the strict lintian gate; ccache is intentionally not
+    # installed (see the header note on why this fallback builds cold).
+    - apt-get update
+    - apt-get install -y --no-install-recommends
+        build-essential ca-certificates devscripts
+        dpkg-dev equivs fakeroot git lintian quilt
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  script:
+    # Install the package's own Build-Depends from debian/control.
+    - mk-build-deps --install --remove
+        --tool='apt-get -y --no-install-recommends' debian/control
+    # -us -uc: no signing in CI (signing is part of publishing).
+    # -b: binary-only; the .dsc is built by the source-package job.
+    - dpkg-buildpackage -us -uc -b
+    # dpkg-buildpackage writes artefacts to the parent of the source
+    # tree; move them in so GitLab can collect them.  *.ddeb covers
+    # Ubuntu's debug-package filename convention (Debian produces
+    # none, so the glob harmlessly expands to nothing there).
+    - mkdir -p artefacts
+    - shopt -s nullglob
+    - for f in ../*.deb ../*.ddeb ../*.changes ../*.buildinfo; do mv "$f" artefacts/; done
+    # Strict lintian, identical invocation to a maintainer's local
+    # run and to the GitHub workflow.  Must run from a directory
+    # where it can see the .changes; the script handles that.
+    - debian/scripts/lintian-local.sh
+  artifacts:
+    name: "debs-${IMAGE}"
+    paths:
+      - artefacts/
+    expire_in: 30 days
