@@ -34,6 +34,33 @@
 #     forward check.  This fallback's job is to prove the amd64 build
 #     completes with adequate disk -- add arm64 cells with
 #     `tags: [saas-linux-medium-arm64]` if cross-arch cover is needed.
+#
+# MANUAL-TRIGGER ONLY -- see the `workflow:` block below.
+# ----------------------------------------------------------------------
+# The DuckDB build is expensive: the three cold build jobs run ~1 h
+# each on the 2-vCPU medium runner, so one full pipeline burns ~180
+# CI minutes.  A GitLab.com *free* namespace gets ~400 CI minutes a
+# month, so two automatic pipelines would exhaust the quota (and the
+# second pipeline here already failed with `ci_quota_exceeded`).
+# This file therefore does NOT run on push: the `workflow:` rules
+# restrict it to manual ("Run pipeline" in the UI), API, and
+# scheduled triggers, so it stays genuine break-glass insurance and
+# does not silently drain the monthly allowance.  To use it: open
+# the project's CI/CD > Pipelines page and click "Run pipeline" on
+# debian/latest.  Buying extra CI minutes or moving to a paid plan
+# would let the `push` source be re-enabled here.
+
+# Run only on explicit triggers, never automatically on push -- the
+# build is too minute-expensive for a free GitLab namespace (see the
+# header note).  `web` = the "Run pipeline" button; `schedule` = a
+# pipeline schedule; `api`/`trigger` = programmatic.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+    - when: never
 
 stages:
   - source
