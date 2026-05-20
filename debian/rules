@@ -88,10 +88,28 @@ override_dh_auto_configure:
 	    -DBUILD_UNITTESTS=OFF \
 	    -DBUILD_SHELL=ON \
 	    -DBUILD_EXTENSIONS="$(DUCKDB_EXTENSIONS)" \
+	    -DEXTENSION_STATIC_BUILD=0 \
 	    -DSET_DUCKDB_LIBRARY_VERSION=ON \
 	    -DDISABLE_UNITY=ON \
 	    $(CCACHE_CMAKE_ARGS) \
 	    -DOVERRIDE_GIT_DESCRIBE=v$(DUCKDB_XYZ)-0-g$(DUCKDB_GIT_HASH)
+
+# EXTENSION_STATIC_BUILD=0 above: upstream defaults this to ON, which
+# statically links a full copy of DuckDB into every loadable extension
+# (autocomplete, core_functions, icu, json, parquet).  That bloats each
+# .duckdb_extension to tens of MB and runs five large archive-link
+# steps -- on top of the duckdb_static.a the CLI already needs -- which
+# is what exhausted the CI runner disk (ar: "No space left on device").
+#
+# With it OFF the extensions are linked with their DuckDB symbols left
+# unresolved; the dynamic loader binds them against the already-loaded
+# libduckdb.so when the extension is dlopen-ed.  Upstream documents
+# this mode (see extension/extension_build_tools.cmake) as the right
+# choice "when running the DuckDB cli directly" -- which is exactly how
+# the Debian package is used: the duckdb CLI we ship loads the
+# extensions we ship, in the same process, so the symbols always
+# resolve.  The portability caveat (DuckDB loaded with RTLD_LOCAL by a
+# third-party host) does not apply to a self-contained package.
 
 # DISABLE_UNITY=ON above is what keeps the 8 GiB memory budget
 # honest.  Upstream's default "unity build" concatenates many .cpp

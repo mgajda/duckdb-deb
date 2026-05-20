@@ -79,6 +79,25 @@ jobs:
           # proving amd64 + arm64 is sufficient.
 
     steps:
+      - name: Free up runner disk space
+        # GitHub-hosted ubuntu-latest gives a job only ~14 GB free on
+        # the root filesystem.  The DuckDB build with DISABLE_UNITY=ON
+        # produces thousands of debuggable .o files plus libduckdb.so,
+        # libduckdb_static.a and the in-tree extensions -- enough to
+        # exhaust that budget (ar failed with "No space left on device"
+        # assembling libduckdb_static.a in run 26118982837).
+        #
+        # This job runs inside a distro container, so the usual
+        # host-side cleanup actions (jlumbroso/free-disk-space) cannot
+        # reach the host's toolcache paths -- the container only sees
+        # the bind mounts GitHub sets up.  /opt/hostedtoolcache *is*
+        # bind-mounted (as /__t), and holds ~8 GB of CPython/Node/Go/
+        # Ruby toolchains this build never uses.  Emptying it from
+        # inside the container reclaims real space on the same volume
+        # the build writes to.  The mount point itself is left intact
+        # so nothing downstream trips over a missing directory.
+        run: rm -rf /__t/* 2>/dev/null || true
+
       - name: Install build prerequisites
         # apt-get is run before the checkout so `git` is available
         # for actions/checkout and dpkg-parsechangelog inside debian/rules.
