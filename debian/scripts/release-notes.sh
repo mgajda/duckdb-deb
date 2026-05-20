@@ -58,10 +58,9 @@ shipped; users should link against the shared library.
 
 This release was built and \`autopkgtest\`-verified on:
 
-- **Debian trixie** (amd64)
-- **Debian sid** (amd64)
-- **Ubuntu 22.04 jammy** (amd64)
-- **Ubuntu 24.04 noble** (amd64)
+- **Debian trixie** (amd64, arm64)
+- **Debian sid** (amd64, arm64)
+- **Ubuntu 24.04 noble** (amd64, arm64)
 
 The same source built a single set of binary packages -- the
 matrix exists to verify that each distribution's toolchain produces

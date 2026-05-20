@@ -21,7 +21,6 @@ Supported suites (use the codename of YOUR distribution):
 
     Debian trixie  -> SUITE=trixie
     Debian sid     -> SUITE=sid
-    Ubuntu 22.04   -> SUITE=jammy
     Ubuntu 24.04   -> SUITE=noble
 
 Three-step install (replace SUITE with your codename above):
@@ -167,44 +166,8 @@ Users will see "NO_PUBKEY <FPR>" from apt-get update until they
 re-import the key via the install steps above.
 
 ------------------------------------------------------------
-3. Internals (for future maintainers)
+3. Repository layout
 ------------------------------------------------------------
-
-Why reprepro and not aptly?
----------------------------
-
-Both produce static apt repos.  Differences:
-
-  reprepro:
-    - In Debian/Ubuntu repos since the early 2000s
-    - Config is one file (debian/reprepro/conf/distributions)
-    - No state outside the repo dir (no daemon, no database)
-    - Stable, simple, less powerful
-
-  aptly:
-    - Newer (Go, 2014+)
-    - Models the repo as a snapshot DB; "publish snapshot" promotes
-    - Supports multi-suite atomic updates
-    - Daemon mode + REST API for managed pipelines
-
-We use reprepro because the mental model fits "publish a tag"
-better -- include this .deb, regenerate Release, sign, push.  No
-need for the snapshot/publish layer aptly adds.
-
-Other options surveyed:
-
-  Cloudsmith, Packagecloud:   commercial, third-party storage
-  Launchpad PPA:              free, but Launchpad rebuilds from
-                              source (slow turnaround), Ubuntu-only
-                              upload path, separate-account setup
-  Self-hosted (own server):   ongoing operational cost
-  Sigstore/cosign:            apt does not natively verify sigstore
-
-GH Pages won on: cost (free), simplicity (no extra service to
-manage), and maintainer control (signing key stays local).
-
-Repo layout
------------
 
 After the first publish, the gh-pages branch contains:
 
@@ -218,7 +181,6 @@ After the first publish, the gh-pages branch contains:
           binary-arm64/Packages.{gz,xz}
           source/Sources.{gz,xz}
       sid/...           (same shape)
-      jammy/...
       noble/...
     pool/
       main/d/duckdb/

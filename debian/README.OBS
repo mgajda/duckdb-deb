@@ -1,177 +1,35 @@
-Publishing duckdb via the openSUSE Build Service (OBS)
-======================================================
+openSUSE Build Service publishing
+=================================
 
-This document describes the one-time bootstrap and the day-to-day
-publish loop for the home:mjgajda/duckdb package on
-https://build.opensuse.org/.
+This package is published via the openSUSE Build Service in the
+project home:mjgajda, which rebuilds it for Debian and Ubuntu
+targets from source.
 
-Why OBS (and not a Launchpad PPA)
----------------------------------
+Package-specific configuration
+------------------------------
 
-  - Builds Debian *and* Ubuntu (and openSUSE, RHEL, ...) from one
-    source.  Launchpad PPAs are Ubuntu-only.
-  - Does not require a GPG key tied to a personal identity; OBS
-    signs the produced repositories with its own per-project key.
-  - The web UI + osc CLI are scriptable; we drive it from
-    debian/scripts/publish.sh.
+The canonical OBS source-service definition is in
+debian/obs/_service.  It tells OBS to fetch this git repository's
+debian/latest branch and assemble a source package.  The _service
+file in the repo is the single source of truth; the copy held by
+OBS is kept in sync from it.
 
-Trust model
------------
+Target distributions built by OBS:
 
-  - The git repository (github.com/mgajda/duckdb-deb, branch
-    debian/latest) is the canonical source.
-  - debian/obs/_service in git is the canonical copy of the OBS
-    source-services definition.  The file at the root of the OBS
-    package (i.e. <osc-checkout>/_service) is a mirror; publish.sh
-    refuses to push if the two have diverged in an unexpected
-    direction.
-  - CI (.github/workflows/debian-package.yml) verifies that
-    debian/latest builds on each supported target, but does NOT
-    push to OBS.  Publishing is always a manual `publish.sh --push`
-    invocation from the maintainer's laptop, after CI is green.
+  - Debian 13 (trixie)
+  - Debian unstable
+  - Ubuntu 24.04 (noble)
 
-One-time bootstrap
-------------------
+Adding or removing a target is an edit to the project metadata
+on OBS and, for the apt-repo channel, a matching change in
+debian/reprepro/conf/distributions.
 
-1. Create an account at https://build.opensuse.org/.  The username
-   becomes your home-project prefix (home:<login>).  This guide
-   assumes 'mjgajda'.  Confirm via the email OBS sends; until you
-   do, login fails with no diagnostic.
-
-2. Install osc and configure credentials:
-
-       sudo apt install osc
-       osc ls                # first run prompts for username/password
-                             # and writes ~/.config/osc/oscrc (mode 0600)
-
-   To avoid plaintext passwords on disk, edit ~/.config/osc/oscrc
-   and replace the `pass = ...` line under [https://api.opensuse.org]
-   with:
-
-       credentials_mgr_class=osc.credentials.KeyringCredentialsManager:keyring.backends.SecretService.Keyring
-
-   Next osc invocation will move the password into the system
-   keyring.
-
-3. Create the package and project metadata:
-
-       osc meta pkg -e home:mjgajda duckdb     # opens $EDITOR; paste
-                                               # the <package> XML from
-                                               # the section below.
-
-       osc meta prj -e home:mjgajda            # opens $EDITOR; paste
-                                               # the <project> XML below.
-
-   Submitting either creates the project lazily if it doesn't yet
-   exist.
-
-4. Push the canonical _service for the first time:
-
-       cd <duckdb-git-checkout>
-       git checkout debian/latest
-       debian/scripts/publish.sh --push --wait
-
-   The first run takes longer because OBS has to bootstrap its
-   build roots for each target.
-
-Package metadata template (paste into `osc meta pkg -e`)
---------------------------------------------------------
-
-    <package name="duckdb" project="home:mjgajda">
-      <title>DuckDB - in-process analytical SQL database</title>
-      <description>
-        DuckDB is an in-process SQL OLAP database management system
-        with a vectorised execution engine, columnar storage and
-        broad SQL support.  This package is built from a fork of
-        github.com/duckdb/duckdb that adds Debian/Ubuntu packaging
-        on the debian/latest branch.
-      </description>
-      <url>https://github.com/mgajda/duckdb-deb</url>
-    </package>
-
-Project metadata template (paste into `osc meta prj -e`)
---------------------------------------------------------
-
-    <project name="home:mjgajda">
-      <title>mjgajda's home project</title>
-      <description>Personal package builds.</description>
-      <person userid="mjgajda" role="maintainer"/>
-      <person userid="mjgajda" role="bugowner"/>
-
-      <repository name="Debian_13">
-        <path project="Debian:13" repository="standard"/>
-        <arch>x86_64</arch>
-      </repository>
-      <repository name="Debian_Unstable">
-        <path project="Debian:Unstable" repository="standard"/>
-        <arch>x86_64</arch>
-      </repository>
-      <repository name="xUbuntu_22.04">
-        <path project="Ubuntu:22.04" repository="universe"/>
-        <arch>x86_64</arch>
-      </repository>
-      <repository name="xUbuntu_24.04">
-        <path project="Ubuntu:24.04" repository="universe"/>
-        <arch>x86_64</arch>
-      </repository>
-      <!-- Uncomment once OBS publishes the 26.04 target server-side:
-      <repository name="xUbuntu_26.04">
-        <path project="Ubuntu:26.04" repository="universe"/>
-        <arch>x86_64</arch>
-      </repository>
-      -->
-    </project>
-
-Day-to-day publish loop
+Syncing the repo to OBS
 -----------------------
 
-1. Sync the upstream branch and rebase debian/latest (see
-   debian/README.source).
-
-2. Bump debian/changelog with a new snapshot version.  Commit and
-   push to github.com/mgajda/duckdb-deb so OBS's tar_scm can fetch it.
-
-3. Run CI by pushing.  Wait for .github/workflows/debian-package.yml
-   to report green.
-
-4. Sync to OBS and trigger a build:
-
-       debian/scripts/publish.sh --push --wait
-
-   This:
-     a. checks the working tree is clean and on debian/latest;
-     b. copies debian/obs/_service into the OBS package;
-     c. runs `osc commit` (which triggers tar_scm, which clones
-        the github mirror at the pinned revision);
-     d. blocks until every target in the build matrix finishes;
-     e. exits non-zero if any target failed (so you notice).
-
-   Built .deb files appear in your project's repositories pages,
-   e.g.:
-     https://download.opensuse.org/repositories/home:/mjgajda/Debian_13/
-
-Drift recovery
---------------
-
-If someone edits the OBS package via the web UI (or you forgot to
-commit a local _service tweak), use:
-
-       debian/scripts/publish.sh           # show drift
-       debian/scripts/publish.sh --pull    # overwrite git from OBS
-
-then commit the result.
-
-Adding new target distributions
--------------------------------
-
-To add (say) Debian 14 once it exists:
-
-  1. `osc meta prj -e home:mjgajda` — add a new <repository>
-     block pointing at Debian:14 standard.
-  2. No change needed in this git tree (the _service file does not
-     enumerate targets — OBS does, in the project meta).
-  3. Re-run publish.sh --push to rebuild against the new target.
-
-To stop building for a target: remove its <repository> block from
-the project meta.  The previously-built .debs remain available in
-the download repo until you also delete them (`osc wipebinaries`).
+    debian/scripts/publish.sh            show drift between the
+                                         repo and OBS
+    debian/scripts/publish.sh --push     sync debian/obs/_service
+                                         into OBS and trigger a build
+    debian/scripts/publish.sh --pull     overwrite the local
+                                         _service from OBS

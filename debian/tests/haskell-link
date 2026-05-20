@@ -16,7 +16,8 @@
 # GHC version gate
 # ----------------
 # duckdb-ffi 1.5.x requires GHC >= 9.6.  Debian trixie (9.6) and sid
-# (9.10) satisfy this; Ubuntu jammy (8.8) and noble (9.4) do not.
+# (9.10) satisfy this; Ubuntu noble (9.4) does not, and Ubuntu's
+# rolling devel release may or may not, depending on when it is run.
 # On a too-old GHC the test exits 77 (the autopkgtest "skip" code)
 # rather than failing -- an old compiler is not a packaging defect
 # of libduckdb-dev.

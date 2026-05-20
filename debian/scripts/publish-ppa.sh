@@ -12,7 +12,8 @@
 # This script's contract is:
 #   - Take a v* tag
 #   - Produce a per-series _source.changes for each Ubuntu LTS we
-#     target (jammy, noble)
+#     target (currently noble; SERIES_LIST is the single source of
+#     truth and can be extended when a new LTS is supported)
 #   - Print the exact dput commands the maintainer should run
 #
 # The maintainer's job is then a copy-paste loop, with ssh-agent +
@@ -115,7 +116,7 @@ PPA_NAME=${PPA_NAME:-ppa:mgajda/duckdb-deb}
 # package with a "~<series>0" version suffix per Debian convention
 # for backports.  Add or remove series here when our compatibility
 # matrix changes.
-SERIES_LIST="jammy noble"
+SERIES_LIST="noble"
 
 # ---- 2. Tool availability -----------------------------------------
 
@@ -198,7 +199,7 @@ for series in $SERIES_LIST; do
     # dch -v sets the version; -D sets the Distribution.  We pass
     # --no-auto-nmu and --force-distribution to override the
     # heuristics that would otherwise reject a downgrade from
-    # 1.5.2-deb1 to 1.5.2~jammy0.
+    # 1.5.2-deb1 to 1.5.2~noble0.
     DEBEMAIL=mjgajda@gmail.com DEBFULLNAME="Michal J. Gajda" \
         dch --newversion "$new_version" \
             --distribution "$series" \

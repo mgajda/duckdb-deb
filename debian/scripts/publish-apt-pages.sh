@@ -135,7 +135,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # Each suite (codename) -> the matrix label substring it pulls
 # .debs from.  See .github/workflows/debian-package.yml for the
 # label format (debs-<distro>-<codename>-<arch>).
-DEB_SUITES="trixie sid jammy noble"
+DEB_SUITES="trixie sid noble"
 
 # Each (suite, arch) pair we expect to see.  The script will warn
 # if a matrix leg is missing from the release.
@@ -281,7 +281,7 @@ curl -fsSL https://mgajda.github.io/duckdb-deb/duckdb-deb-archive-key.asc \\
     | sudo gpg --dearmor -o /etc/apt/keyrings/duckdb-deb.gpg
 
 # 2. Add the source (replace SUITE with your distro codename:
-#    trixie, sid, jammy, or noble)
+#    trixie, sid, or noble)
 echo "deb [signed-by=/etc/apt/keyrings/duckdb-deb.gpg] \\
       https://mgajda.github.io/duckdb-deb SUITE main" \\
     | sudo tee /etc/apt/sources.list.d/duckdb-deb.list

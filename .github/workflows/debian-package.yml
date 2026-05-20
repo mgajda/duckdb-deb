@@ -28,47 +28,55 @@ jobs:
   build:
     name: ${{ matrix.target.label }}
     runs-on: ${{ matrix.target.runner }}
+    # Per-cell continue-on-error: only the experimental cells
+    # (ubuntu:devel -- a rolling, weekly-changing target) are
+    # allowed to fail without gating the matrix.  Every other cell
+    # is required.  Cells set matrix.target.experimental: true to
+    # opt in; the rest leave it unset (falsy).
+    continue-on-error: ${{ matrix.target.experimental == true }}
     container:
       image: ${{ matrix.target.image }}
     strategy:
       fail-fast: false
       matrix:
         target:
-          # Native amd64 -- the original four legs.  runner: ubuntu-latest
-          # currently resolves to ubuntu-24.04 (free, 4 CPUs).
+          # The matrix covers three distributions (Debian trixie,
+          # Debian sid, Ubuntu noble) on two architectures (amd64,
+          # arm64), plus Ubuntu's rolling development release as a
+          # non-gating forward-looking check.
           #
-          # ccache: true on three amd64 cells -- debian-trixie
-          # (newest Debian stable), debian-sid (Debian unstable),
-          # and ubuntu-noble (newest Ubuntu LTS).  GitHub's per-repo
+          # runner: ubuntu-latest hosts the amd64 cells;
+          # ubuntu-24.04-arm hosts the arm64 cells.  The runner is
+          # only the host VM -- the actual build environment is the
+          # container named in image:, and debian:* / ubuntu:* are
+          # multi-arch on Docker Hub, so the same image: value picks
+          # the arch matching its host.
+          #
+          # ccache: true on the three amd64 cells.  GitHub's per-repo
           # cache budget is 10 GB; with CCACHE_MAXSIZE=3.3G that is
-          # 3 x 3.3 = 9.9 GB, right at the budget.  The other five
-          # cells build cold.  ccache produces byte-identical
-          # objects, so cached cells still build exactly what the
-          # cold cells build.
+          # 3 x 3.3 = 9.9 GB.  The arm64 cells build cold.  ccache
+          # produces byte-identical objects, so cached and cold
+          # cells build exactly the same code.
           - { label: debian-trixie-amd64,  image: 'debian:trixie', runner: 'ubuntu-latest', ccache: true }
           - { label: debian-sid-amd64,     image: 'debian:sid',    runner: 'ubuntu-latest', ccache: true }
-          - { label: ubuntu-jammy-amd64,   image: 'ubuntu:22.04',  runner: 'ubuntu-latest' }
           - { label: ubuntu-noble-amd64,   image: 'ubuntu:24.04',  runner: 'ubuntu-latest', ccache: true }
-          # Native arm64 -- runner labels ubuntu-{22,24}.04-arm
-          # were promoted out of preview in 2025 and are free for
-          # public repos with the same 4-CPU spec as amd64.  The
-          # debian:trixie and ubuntu:* images are multi-arch on
-          # Docker Hub, so the same image: value picks the arm64
-          # manifest automatically when run on an arm64 host.
+          # ubuntu:devel is the current Ubuntu development release,
+          # a rolling Docker Hub tag.  experimental: true so a
+          # breakage on this moving target does not gate the matrix;
+          # it is a forward-looking check that catches incompatibility
+          # with the next Ubuntu before it ships.
+          - { label: ubuntu-devel-amd64,   image: 'ubuntu:devel',  runner: 'ubuntu-latest', experimental: true }
           - { label: debian-trixie-arm64,  image: 'debian:trixie', runner: 'ubuntu-24.04-arm' }
           - { label: debian-sid-arm64,     image: 'debian:sid',    runner: 'ubuntu-24.04-arm' }
-          - { label: ubuntu-jammy-arm64,   image: 'ubuntu:22.04',  runner: 'ubuntu-22.04-arm' }
           - { label: ubuntu-noble-arm64,   image: 'ubuntu:24.04',  runner: 'ubuntu-24.04-arm' }
-          # ubuntu-26.04: add once the container image is published
-          # on Docker Hub; not all LTS releases get a same-day image.
+          - { label: ubuntu-devel-arm64,   image: 'ubuntu:devel',  runner: 'ubuntu-24.04-arm', experimental: true }
           #
-          # riscv64 is intentionally NOT built here.  It has no
-          # native GitHub-hosted runner; the only option is qemu-user
-          # emulation, which took 5+ hours and repeatedly hit the
-          # job timeout.  Debian's own autobuilders have native
-          # riscv64 hardware and will rebuild the package for that
-          # architecture from the source we publish -- CI does not
-          # need to prove riscv64 itself.  ppc64el / s390x likewise.
+          # Architectures beyond amd64/arm64 (riscv64, ppc64el,
+          # s390x) are not built here: GitHub-hosted runners exist
+          # only for amd64 and arm64.  Debian's archive autobuilders
+          # have native hardware for the other architectures and
+          # rebuild the package from the source package, so CI
+          # proving amd64 + arm64 is sufficient.
 
     steps:
       - name: Install build prerequisites
@@ -289,6 +297,9 @@ jobs:
     name: autopkgtest-${{ matrix.target.label }}
     runs-on: ${{ matrix.target.runner }}
     needs: [build]
+    # Same per-cell rule as the build job: the ubuntu:devel cells
+    # are experimental and do not gate the matrix.
+    continue-on-error: ${{ matrix.target.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -300,12 +311,12 @@ jobs:
           # arm64 we have native runners and don't need that.
           - { label: debian-trixie-amd64,  image: 'debian:trixie', runner: 'ubuntu-latest' }
           - { label: debian-sid-amd64,     image: 'debian:sid',    runner: 'ubuntu-latest' }
-          - { label: ubuntu-jammy-amd64,   image: 'ubuntu:22.04',  runner: 'ubuntu-latest' }
           - { label: ubuntu-noble-amd64,   image: 'ubuntu:24.04',  runner: 'ubuntu-latest' }
+          - { label: ubuntu-devel-amd64,   image: 'ubuntu:devel',  runner: 'ubuntu-latest', experimental: true }
           - { label: debian-trixie-arm64,  image: 'debian:trixie', runner: 'ubuntu-24.04-arm' }
           - { label: debian-sid-arm64,     image: 'debian:sid',    runner: 'ubuntu-24.04-arm' }
-          - { label: ubuntu-jammy-arm64,   image: 'ubuntu:22.04',  runner: 'ubuntu-22.04-arm' }
           - { label: ubuntu-noble-arm64,   image: 'ubuntu:24.04',  runner: 'ubuntu-24.04-arm' }
+          - { label: ubuntu-devel-arm64,   image: 'ubuntu:devel',  runner: 'ubuntu-24.04-arm', experimental: true }
     container:
       image: ${{ matrix.target.image }}
     steps:

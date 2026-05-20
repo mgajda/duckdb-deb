@@ -43,15 +43,6 @@ SignWith: yes
 
 Origin: mgajda/duckdb-deb
 Label: DuckDB (mgajda packaging fork)
-Suite: jammy
-Codename: jammy
-Architectures: amd64 arm64 source
-Components: main
-Description: DuckDB binaries built for Ubuntu 22.04 jammy
-SignWith: yes
-
-Origin: mgajda/duckdb-deb
-Label: DuckDB (mgajda packaging fork)
 Suite: noble
 Codename: noble
 Architectures: amd64 arm64 source

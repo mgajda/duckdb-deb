@@ -30,7 +30,7 @@ The packaging fork ships its own apt repository at
 https://mgajda.github.io/duckdb-deb/ — one-line `apt install duckdb`
 once you've added the source.
 
-Three-step install (replace SUITE with trixie / sid / jammy / noble
+Three-step install (replace SUITE with trixie / sid / noble
 to match your distribution):
 
     sudo install -d -m 0755 /etc/apt/keyrings
@@ -79,9 +79,8 @@ To install, download all three .deb files for your distribution and:
 dependencies for you.
 
 Upgrades are manual: re-download the new release's .debs and
-`sudo apt install ./*.deb` again.  This is the trade-off of the
-"download from a release page" model.  For automatic upgrades via
-`apt update`, use channel 1 above.
+`sudo apt install ./*.deb` again.  For automatic upgrades via
+`apt update`, use channel 1.
 
 Verifying downloads
 -------------------
@@ -124,26 +123,16 @@ Once the OBS account is active, this section will become:
     sudo apt install duckdb
 
 with one entry per supported target (Debian_13, Debian_Unstable,
-xUbuntu_22.04, xUbuntu_24.04).  Until then, use channel 1 or 2.
+xUbuntu_24.04).  Until then, use channel 1 or 2.
 
 Supported distributions
 -----------------------
 
   Debian 13 (trixie)        amd64, arm64
   Debian unstable (sid)     amd64, arm64
-  Ubuntu 22.04 (jammy)      amd64, arm64
   Ubuntu 24.04 (noble)      amd64, arm64
 
-riscv64 (and ppc64el, s390x) are not built by this packaging's
-CI: GitHub-hosted runners exist only for amd64 and arm64, and
-emulating those architectures took 5+ hours and exceeded the CI
-job timeout.  Debian's own autobuilders have native hardware for
-those architectures and rebuild the package from the source we
-publish; CI does not need to prove them.
-
-Older Debian releases (bookworm, bullseye) are not targeted: the
-package requires g++ (>= 11) and CMake (>= 3.14), which are not
-both available in those releases without backports.
+The package requires g++ (>= 11) and CMake (>= 3.14).
 
 Reporting bugs
 --------------

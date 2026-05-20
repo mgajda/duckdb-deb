@@ -67,8 +67,8 @@ Compiler
 --------
 
 Build-Depends specifies g++ (>= 11), which is the gcc that ships in
-all currently-supported Debian and Ubuntu LTS targets (Debian
-trixie/sid, Ubuntu jammy/noble).  This is a packaging choice for
+all currently-supported Debian and Ubuntu targets (Debian
+trixie/sid, Ubuntu noble).  This is a packaging choice for
 predictable C++17 + hardening defaults — upstream's own minimum is
 just C++11.  To build with clang instead, set CC and CXX before
 dpkg-buildpackage:
