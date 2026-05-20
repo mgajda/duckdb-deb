@@ -87,21 +87,11 @@ override_dh_auto_configure:
 	    -DCMAKE_BUILD_TYPE=Release \
 	    -DBUILD_UNITTESTS=OFF \
 	    -DBUILD_SHELL=ON \
-	    -DBUILD_STATIC_LIBRARY=OFF \
 	    -DBUILD_EXTENSIONS="$(DUCKDB_EXTENSIONS)" \
 	    -DSET_DUCKDB_LIBRARY_VERSION=ON \
 	    -DDISABLE_UNITY=ON \
 	    $(CCACHE_CMAKE_ARGS) \
 	    -DOVERRIDE_GIT_DESCRIBE=v$(DUCKDB_XYZ)-0-g$(DUCKDB_GIT_HASH)
-
-# BUILD_STATIC_LIBRARY=OFF (via debian/patches/skip-static-library.patch)
-# stops CMake building libduckdb_static.a.  We never ship the static
-# archive -- the override_dh_auto_install below used to delete it after
-# the fact -- but for a Release-with-debug-info build the archive is
-# ~2 GB, and on a disk-constrained CI runner (GitHub-hosted runners
-# have ~14 GB free) assembling it tipped one build into "No space
-# left on device".  Not building it at all removes both the disk
-# pressure and the need for the post-build delete.
 
 # DISABLE_UNITY=ON above is what keeps the 8 GiB memory budget
 # honest.  Upstream's default "unity build" concatenates many .cpp
@@ -146,11 +136,10 @@ debian/duckdb.1: debian/duckdb.1.md
 	    --variable=header:"User Commands" \
 	    --output=$@ $<
 
-# We do not ship libduckdb_static.a.  With skip-static-library.patch
-# applied and -DBUILD_STATIC_LIBRARY=OFF passed at configure time, the
-# archive is never built or installed -- so the find/-delete below is
-# a defensive no-op kept only in case the patch ever fails to apply
-# against a future upstream refactor of src/CMakeLists.txt.
+# The packaging ships only the shared library.  Upstream's CMake
+# builds and installs libduckdb_static.a unconditionally (the
+# in-tree extensions link against it), so it is removed from the
+# staging tree after install rather than at configure time.
 override_dh_auto_install:
 	dh_auto_install
 	find debian/tmp -name 'libduckdb_static.a' -delete
