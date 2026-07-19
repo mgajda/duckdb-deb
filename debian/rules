@@ -2,6 +2,18 @@
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
+# LTO temp-file directory: the LTO link step processes
+# libduckdb_static.a (~13 GiB with DISABLE_UNITY=ON) and generates
+# temporary files that overflow a 15 GiB tmpfs-backed /tmp.
+# Export TMPDIR (and TMP/TEMP for good measure) to a disk-backed
+# location before invoking dpkg-buildpackage:
+#
+#   export TMPDIR=/some/disk/pool/tmp
+#   dpkg-buildpackage -us -uc -b
+#
+# This is handled automatically when building via the CI-reproducing
+# wrapper at tmp/build-deb.sh.
+
 # Cap parallelism to fit an 8 GiB RAM budget.
 #
 # DuckDB's amalgamated sources instantiate heavy templates from
